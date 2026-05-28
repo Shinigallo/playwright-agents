@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playwright Agents</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3250;
+      --accent: #7c6af7;
+      --accent2: #56cfb2;
+      --danger: #f7706a;
+      --warn: #f7c46a;
+      --text: #e4e6f0;
+      --text2: #8b90b0;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── HEADER ── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 32px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    header svg { flex-shrink: 0; }
+    header h1 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.3px; }
+    header span { font-size: .8rem; color: var(--text2); margin-left: 4px; }
+    .health-bar {
+      margin-left: auto;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-size: .72rem;
+      font-weight: 600;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      transition: border-color .3s;
+    }
+    .pill .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--text2);
+      transition: background .3s;
+    }
+    .pill.ok .dot  { background: var(--accent2); }
+    .pill.err .dot { background: var(--danger); }
+    .pill.ok  { border-color: var(--accent2); }
+    .pill.err { border-color: var(--danger); }
+
+    /* ── LAYOUT ── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      grid-template-rows: 1fr;
+      gap: 0;
+      overflow: hidden;
+      height: calc(100vh - 65px);
+    }
+
+    /* ── SIDEBAR ── */
+    aside {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      padding: 24px 20px;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    .card h2 {
+      font-size: .8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      color: var(--text2);
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: .8rem;
+      color: var(--text2);
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: .88rem;
+      padding: 10px 12px;
+      outline: none;
+      font-family: inherit;
+      transition: border-color .2s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--accent);
+    }
+    textarea { resize: vertical; min-height: 90px; }
+
+    .field { margin-bottom: 14px; }
+    .field:last-child { margin-bottom: 0; }
+
+    .model-select { display: flex; gap: 6px; flex-wrap: wrap; }
+    .model-btn {
+      padding: 5px 12px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text2);
+      font-size: .75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .model-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .run-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      font-weight: 700;
+      font-size: .95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity .2s, transform .1s;
+    }
+    .run-btn:hover { opacity: .9; }
+    .run-btn:active { transform: scale(.98); }
+    .run-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* spinner */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      display: none;
+    }
+    .run-btn.loading .spinner { display: block; }
+    .run-btn.loading .btn-label { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* history */
+    .history-list { display: flex; flex-direction: column; gap: 8px; max-height: 220px; overflow-y: auto; }
+    .hist-item {
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: .8rem;
+      transition: border-color .2s;
+    }
+    .hist-item:hover { border-color: var(--accent); }
+    .hist-item .hi-title { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hist-item .hi-meta { color: var(--text2); font-size: .72rem; margin-top: 2px; display: flex; gap: 8px; }
+    .badge { padding: 2px 7px; border-radius: 100px; font-size: .68rem; font-weight: 700; }
+    .badge.pass { background: rgba(86,207,178,.15); color: var(--accent2); }
+    .badge.fail { background: rgba(247,112,106,.15); color: var(--danger); }
+
+    /* ── CONTENT ── */
+    section {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 24px;
+      flex-shrink: 0;
+    }
+    .tab {
+      padding: 14px 18px;
+      font-size: .82rem;
+      font-weight: 600;
+      color: var(--text2);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .2s, border-color .2s;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: none;
+    }
+    .tab-content.active { display: block; }
+
+    /* pipeline visualization */
+    .pipeline {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+    }
+    .p-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 14px 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      min-width: 110px;
+      transition: border-color .3s, background .3s;
+    }
+    .p-step .p-icon { font-size: 1.4rem; }
+    .p-step .p-name { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .p-step .p-status { font-size: .68rem; color: var(--text2); }
+    .p-step.active { border-color: var(--accent); background: rgba(124,106,247,.08); }
+    .p-step.done   { border-color: var(--accent2); background: rgba(86,207,178,.06); }
+    .p-step.error  { border-color: var(--danger); background: rgba(247,112,106,.06); }
+    .p-arrow { color: var(--text2); font-size: 1.1rem; padding: 0 6px; }
+
+    /* log */
+    .log-area {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-family: 'Fira Code', 'Courier New', monospace;
+      font-size: .78rem;
+      line-height: 1.7;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .log-line { display: block; }
+    .log-line.info  { color: var(--text2); }
+    .log-line.ok    { color: var(--accent2); }
+    .log-line.fail  { color: var(--danger); }
+    .log-line.heal  { color: var(--warn); }
+
+    /* code block */
+    .code-wrap {
+      position: relative;
+      margin-top: 8px;
+    }
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      overflow-x: auto;
+      font-family: 'Fira Code', monospace;
+      font-size: .78rem;
+      line-height: 1.6;
+      color: #c9d1d9;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 10px; right: 10px;
+      padding: 4px 10px;
+      font-size: .72rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text2);
+      cursor: pointer;
+      transition: color .2s;
+    }
+    .copy-btn:hover { color: var(--text); }
+
+    /* plan steps */
+    .steps-list { display: flex; flex-direction: column; gap: 8px; }
+    .step-item {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .step-num {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: .72rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-body { flex: 1; }
+    .step-action {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-size: .68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-right: 6px;
+      background: rgba(124,106,247,.2);
+      color: var(--accent);
+    }
+    .step-desc { font-size: .82rem; color: var(--text); }
+    .step-meta { font-size: .72rem; color: var(--text2); margin-top: 3px; }
+
+    /* result banner */
+    .result-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      margin-bottom: 20px;
+      font-weight: 700;
+      font-size: 1rem;
+    }
+    .result-banner.pass { background: rgba(86,207,178,.12); border: 1px solid var(--accent2); color: var(--accent2); }
+    .result-banner.fail { background: rgba(247,112,106,.12); border: 1px solid var(--danger); color: var(--danger); }
+    .result-banner .r-icon { font-size: 1.4rem; }
+
+    /* empty state */
+    .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text2);
+      gap: 12px;
+      text-align: center;
+    }
+    .empty svg { opacity: .3; }
+    .empty p { font-size: .88rem; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+    <rect width="28" height="28" rx="8" fill="#7c6af7"/>
+    <circle cx="14" cy="14" r="6" stroke="white" stroke-width="2"/>
+    <circle cx="14" cy="14" r="2" fill="white"/>
+    <line x1="14" y1="4" x2="14" y2="8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="14" y1="20" x2="14" y2="24" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="4" y1="14" x2="8" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
+    <line x1="20" y1="14" x2="24" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <h1>Playwright Agents <span>v1.0</span></h1>
+  <div class="health-bar" id="healthBar">
+    <div class="pill" id="pill-orchestrator"><span class="dot"></span>orchestrator</div>
+    <div class="pill" id="pill-planner"><span class="dot"></span>planner</div>
+    <div class="pill" id="pill-generator"><span class="dot"></span>generator</div>
+    <div class="pill" id="pill-healer"><span class="dot"></span>healer</div>
+    <div class="pill" id="pill-executor"><span class="dot"></span>executor</div>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <!-- RUN CARD -->
+    <div class="card">
+      <h2>New Test Run</h2>
+
+      <div class="field">
+        <label>Prompt</label>
+        <textarea id="prompt" placeholder="e.g. Test the login flow with valid credentials and verify redirect to dashboard"></textarea>
+      </div>
+
+      <div class="field">
+        <label>Base URL</label>
+        <input id="baseUrl" type="url" value="https://playwright.dev" placeholder="https://your-app.com" />
+      </div>
+
+      <div class="field">
+        <label>Orchestrator URL</label>
+        <input id="orchUrl" type="url" value="http://localhost:3000" />
+      </div>
+
+      <div class="field">
+        <label>Model</label>
+        <div class="model-select">
+          <button class="model-btn active" data-model="gemini-2.0-flash">2.0 Flash</button>
+          <button class="model-btn" data-model="gemini-2.5-pro">2.5 Pro</button>
+          <button class="model-btn" data-model="gemini-3.0-ultra">3.0 Ultra</button>
+        </div>
+      </div>
+
+      <button class="run-btn" id="runBtn" onclick="runTest()">
+        <div class="spinner"></div>
+        <span class="btn-label">▶ Run Test</span>
+      </button>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="card">
+      <h2>History</h2>
+      <div class="history-list" id="historyList">
+        <div style="color:var(--text2);font-size:.8rem;text-align:center;padding:16px 0">No runs yet</div>
+      </div>
+    </div>
+  </aside>
+
+  <section>
+    <div class="tabs">
+      <div class="tab active" data-tab="pipeline">Pipeline</div>
+      <div class="tab" data-tab="plan">Plan</div>
+      <div class="tab" data-tab="code">Generated Code</div>
+      <div class="tab" data-tab="logs">Logs</div>
+    </div>
+
+    <!-- PIPELINE TAB -->
+    <div class="tab-content active" id="tab-pipeline">
+      <div id="emptyState" class="empty">
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+          <rect x="8" y="20" width="14" height="24" rx="4" stroke="#8b90b0" stroke-width="2"/>
+          <rect x="25" y="12" width="14" height="32" rx="4" stroke="#8b90b0" stroke-width="2"/>
+          <rect x="42" y="20" width="14" height="24" rx="4" stroke="#8b90b0" stroke-width="2"/>
+        </svg>
+        <p>Configure a prompt and run your first test</p>
+      </div>
+
+      <div id="pipelineView" style="display:none">
+        <div class="pipeline" id="pipeline">
+          <div class="p-step" id="ps-planner">
+            <span class="p-icon">🧠</span>
+            <span class="p-name">Planner</span>
+            <span class="p-status" id="pss-planner">idle</span>
+          </div>
+          <span class="p-arrow">→</span>
+          <div class="p-step" id="ps-generator">
+            <span class="p-icon">⚙️</span>
+            <span class="p-name">Generator</span>
+            <span class="p-status" id="pss-generator">idle</span>
+          </div>
+          <span class="p-arrow">→</span>
+          <div class="p-step" id="ps-executor">
+            <span class="p-icon">🚀</span>
+            <span class="p-name">Executor</span>
+            <span class="p-status" id="pss-executor">idle</span>
+          </div>
+          <span class="p-arrow">⇄</span>
+          <div class="p-step" id="ps-healer">
+            <span class="p-icon">🩺</span>
+            <span class="p-name">Healer</span>
+            <span class="p-status" id="pss-healer">idle</span>
+          </div>
+        </div>
+
+        <div id="resultBanner" style="display:none"></div>
+
+        <div style="margin-bottom:12px">
+          <label style="margin-bottom:8px;display:block">Live Log</label>
+          <div class="log-area" id="liveLog"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PLAN TAB -->
+    <div class="tab-content" id="tab-plan">
+      <div class="empty" id="emptyPlan">
+        <p>Run a test to see the generated plan</p>
+      </div>
+      <div id="planContent" style="display:none">
+        <h3 id="planTitle" style="margin-bottom:16px;font-size:1rem"></h3>
+        <div class="steps-list" id="stepsList"></div>
+      </div>
+    </div>
+
+    <!-- CODE TAB -->
+    <div class="tab-content" id="tab-code">
+      <div class="empty" id="emptyCode">
+        <p>Run a test to see the generated code</p>
+      </div>
+      <div id="codeContent" style="display:none">
+        <div class="code-wrap">
+          <button class="copy-btn" onclick="copyCode()">Copy</button>
+          <pre id="codeBlock"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGS TAB -->
+    <div class="tab-content" id="tab-logs">
+      <div class="empty" id="emptyLogs">
+        <p>Run a test to see detailed logs</p>
+      </div>
+      <div id="logsContent" style="display:none">
+        <div class="log-area" id="fullLog" style="max-height:none"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const SERVICES = {
+    orchestrator: 3000,
+    planner: 3001,
+    generator: 3002,
+    healer: 3003,
+    executor: 3004
+  };
+
+  let selectedModel = 'gemini-2.0-flash';
+  let history = [];
+  let currentResult = null;
+
+  // ── Model selector ──
+  document.querySelectorAll('.model-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedModel = btn.dataset.model;
+    });
+  });
+
+  // ── Tabs ──
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ── Health checks ──
+  async function checkHealth() {
+    const orchUrl = document.getElementById('orchUrl').value.replace(/\/$/, '');
+    const base = new URL(orchUrl);
+
+    for (const [svc, port] of Object.entries(SERVICES)) {
+      const pill = document.getElementById('pill-' + svc);
+      try {
+        const url = `${base.protocol}//${base.hostname}:${port}/health`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
+        const ok = r.ok;
+        pill.className = 'pill ' + (ok ? 'ok' : 'err');
+      } catch {
+        pill.className = 'pill err';
+      }
+    }
+  }
+
+  checkHealth();
+  setInterval(checkHealth, 10000);
+
+  // ── Pipeline state helpers ──
+  function setPipelineStep(step, state, status) {
+    const el = document.getElementById('ps-' + step);
+    const st = document.getElementById('pss-' + step);
+    el.className = 'p-step ' + state;
+    st.textContent = status;
+  }
+
+  function resetPipeline() {
+    ['planner','generator','executor','healer'].forEach(s => setPipelineStep(s, '', 'idle'));
+  }
+
+  function appendLog(msg) {
+    const el = document.getElementById('liveLog');
+    const line = document.createElement('span');
+    line.className = 'log-line ' + classifyLog(msg);
+    line.textContent = msg;
+    el.appendChild(line);
+    el.appendChild(document.createElement('br'));
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function classifyLog(msg) {
+    if (msg.includes('✅') || msg.includes('PASSED')) return 'ok';
+    if (msg.includes('❌') || msg.includes('failed') || msg.includes('Error')) return 'fail';
+    if (msg.includes('Healing') || msg.includes('Healer')) return 'heal';
+    return 'info';
+  }
+
+  // ── Simulate live pipeline updates from log messages ──
+  function updatePipelineFromLog(log) {
+    log.forEach(msg => {
+      if (msg.includes('Planning'))    setPipelineStep('planner',   'active', 'running…');
+      if (msg.includes('Plan:'))       setPipelineStep('planner',   'done',   'done ✓');
+      if (msg.includes('Generating'))  setPipelineStep('generator', 'active', 'running…');
+      if (msg.includes('Code generated')) setPipelineStep('generator', 'done', 'done ✓');
+      if (msg.includes('Executing'))   setPipelineStep('executor',  'active', 'running…');
+      if (msg.includes('PASSED'))      setPipelineStep('executor',  'done',   'passed ✓');
+      if (msg.includes('failed'))      setPipelineStep('executor',  'error',  'failed ✗');
+      if (msg.includes('Healing'))     setPipelineStep('healer',    'active', 'healing…');
+      if (msg.includes('Code fixed'))  setPipelineStep('healer',    'done',   'fixed ✓');
+    });
+  }
+
+  // ── Main run ──
+  async function runTest() {
+    const prompt  = document.getElementById('prompt').value.trim();
+    const baseUrl = document.getElementById('baseUrl').value.trim();
+    const orchUrl = document.getElementById('orchUrl').value.replace(/\/$/, '');
+
+    if (!prompt || !baseUrl) {
+      alert('Please fill in Prompt and Base URL');
+      return;
+    }
+
+    // UI setup
+    const btn = document.getElementById('runBtn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('pipelineView').style.display = 'block';
+    document.getElementById('resultBanner').style.display = 'none';
+    document.getElementById('liveLog').innerHTML = '';
+    resetPipeline();
+
+    // Switch to pipeline tab
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="pipeline"]').classList.add('active');
+    document.getElementById('tab-pipeline').classList.add('active');
+
+    appendLog(`Starting run — model: ${selectedModel}`);
+    appendLog(`Prompt: "${prompt}"`);
+    appendLog(`Base URL: ${baseUrl}`);
+
+    try {
+      const resp = await fetch(`${orchUrl}/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, baseUrl, model: selectedModel })
+      });
+
+      const result = await resp.json();
+      currentResult = result;
+
+      // Show log lines
+      (result.log || []).forEach(l => appendLog(l));
+      updatePipelineFromLog(result.log || []);
+
+      // Result banner
+      const banner = document.getElementById('resultBanner');
+      banner.style.display = 'flex';
+      if (result.passed) {
+        banner.className = 'result-banner pass';
+        banner.innerHTML = '<span class="r-icon">✅</span> All tests passed!';
+      } else {
+        banner.className = 'result-banner fail';
+        banner.innerHTML = `<span class="r-icon">❌</span> Tests failed after all heal attempts`;
+      }
+
+      // Fill plan tab
+      if (result.plan) {
+        document.getElementById('emptyPlan').style.display = 'none';
+        document.getElementById('planContent').style.display = 'block';
+        document.getElementById('planTitle').textContent = result.plan.title || 'Test Plan';
+        const list = document.getElementById('stepsList');
+        list.innerHTML = '';
+        (result.plan.steps || []).forEach(s => {
+          const el = document.createElement('div');
+          el.className = 'step-item';
+          el.innerHTML = `
+            <div class="step-num">${s.id}</div>
+            <div class="step-body">
+              <span class="step-action">${s.action}</span>
+              <span class="step-desc">${s.description}</span>
+              ${s.selector ? `<div class="step-meta">selector: <code>${s.selector}</code></div>` : ''}
+              ${s.value     ? `<div class="step-meta">value: <code>${s.value}</code></div>` : ''}
+              ${s.assertion ? `<div class="step-meta">assert: <code>${s.assertion}</code></div>` : ''}
+            </div>`;
+          list.appendChild(el);
+        });
+      }
+
+      // Fill code tab
+      if (result.finalCode) {
+        document.getElementById('emptyCode').style.display = 'none';
+        document.getElementById('codeContent').style.display = 'block';
+        document.getElementById('codeBlock').textContent = result.finalCode;
+      }
+
+      // Fill logs tab
+      document.getElementById('emptyLogs').style.display = 'none';
+      document.getElementById('logsContent').style.display = 'block';
+      const fullLog = document.getElementById('fullLog');
+      fullLog.innerHTML = '';
+      (result.log || []).forEach(l => {
+        const line = document.createElement('span');
+        line.className = 'log-line ' + classifyLog(l);
+        line.textContent = l;
+        fullLog.appendChild(line);
+        fullLog.appendChild(document.createElement('br'));
+      });
+
+      // Add to history
+      history.unshift({
+        id: result.testId,
+        title: result.plan?.title || prompt.substring(0, 40),
+        passed: result.passed,
+        time: new Date().toLocaleTimeString(),
+        result
+      });
+      renderHistory();
+
+    } catch (err) {
+      appendLog('❌ Error: ' + err.message);
+      appendLog('Make sure the orchestrator is running at ' + orchUrl);
+    }
+
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+
+  function renderHistory() {
+    const list = document.getElementById('historyList');
+    if (!history.length) return;
+    list.innerHTML = history.map((h, i) => `
+      <div class="hist-item" onclick="loadHistory(${i})">
+        <div class="hi-title">${h.title}</div>
+        <div class="hi-meta">
+          <span class="badge ${h.passed ? 'pass' : 'fail'}">${h.passed ? 'PASS' : 'FAIL'}</span>
+          <span>#${h.id}</span>
+          <span>${h.time}</span>
+        </div>
+      </div>`).join('');
+  }
+
+  function loadHistory(i) {
+    const h = history[i];
+    currentResult = h.result;
+
+    // Re-populate code tab
+    if (h.result.finalCode) {
+      document.getElementById('emptyCode').style.display = 'none';
+      document.getElementById('codeContent').style.display = 'block';
+      document.getElementById('codeBlock').textContent = h.result.finalCode;
+    }
+  }
+
+  function copyCode() {
+    const code = document.getElementById('codeBlock').textContent;
+    navigator.clipboard.writeText(code);
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  }
+</script>
+</body>
+</html>
