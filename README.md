@@ -1,5 +1,9 @@
 # Playwright AI Agents — Multi-Container Architecture
 
+![CI](https://github.com/Shinigallo/playwright-agents/actions/workflows/ci.yml/badge.svg)
+
+— Multi-Container Architecture
+
 ## Architettura
 
 ```
