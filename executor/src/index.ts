@@ -28,6 +28,7 @@ fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
 // Mappa testId -> porta show-report
 const reportServers: Map<string, number> = new Map();
+const reportProcs: Map<string, import('child_process').ChildProcess> = new Map();
 let nextPort = 9300;
 
 function startReportServer(testId: string, reportDir: string): number {
@@ -39,13 +40,25 @@ function startReportServer(testId: string, reportDir: string): number {
 
   const proc = spawn(
     'npx', ['playwright', 'show-report', reportDir, '--port', String(port), '--host', '0.0.0.0'],
-    { cwd: '/app', detached: true, stdio: 'ignore' }
+    { cwd: '/app', stdio: 'ignore' }  // NO detached — il processo muore col container
   );
-  proc.unref();
+  reportProcs.set(testId, proc);
 
   console.log(`[Executor] Report server for ${testId} started on :${port}`);
   return port;
 }
+
+// Graceful shutdown: killa tutti i report server
+function shutdownReportServers() {
+  for (const [id, proc] of reportProcs.entries()) {
+    try { proc.kill('SIGTERM'); } catch {}
+  }
+  reportProcs.clear();
+  reportServers.clear();
+}
+
+process.on('SIGTERM', () => { shutdownReportServers(); process.exit(0); });
+process.on('SIGINT',  () => { shutdownReportServers(); process.exit(0); });
 
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'executor' }));
 
