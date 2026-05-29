@@ -70,6 +70,9 @@ services:
       - shared-results:/shared/results
     networks:
       - agents-net
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
 volumes:
   shared-tests:
