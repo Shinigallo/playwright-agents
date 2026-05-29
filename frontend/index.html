@@ -653,6 +653,44 @@
   setInterval(loadReports, 15000);
 
   // ── Pipeline state helpers ──
+  // ── Live status polling ──
+  let statusPoller = null;
+
+  function startStatusPolling() {
+    const orchUrl = document.getElementById('orchUrl').value.replace(/\/$/, '');
+    statusPoller = setInterval(async () => {
+      try {
+        const r = await fetch(`${orchUrl}/status`);
+        const s = await r.json();
+        const svc = s.activeService;
+        const all = ['planner','generator','executor','healer'];
+        all.forEach(name => {
+          const el = document.getElementById('pss-' + name);
+          const card = el?.closest('.p-step');
+          if (!el || !card) return;
+          if (name === svc) {
+            el.textContent = s.step + (s.attempt > 1 ? ` #${s.attempt}` : '') + '…';
+            card.setAttribute('data-state', 'active');
+          } else if (s.log?.join(' ').includes(name === 'planner' ? 'Plan:' : name === 'generator' ? 'Generating' : name === 'executor' ? 'PASSED' : 'fixed')) {
+            // already done
+          }
+        });
+        // update live log
+        if (s.log?.length) {
+          const logEl = document.getElementById('liveLog');
+          if (logEl) logEl.textContent = s.log.join('\n');
+        }
+        if (s.step === 'done' || s.step === 'error' || s.step === 'idle') {
+          stopStatusPolling();
+        }
+      } catch(e) {}
+    }, 1500);
+  }
+
+  function stopStatusPolling() {
+    if (statusPoller) { clearInterval(statusPoller); statusPoller = null; }
+  }
+
   function setPipelineStep(step, state, status) {
     const el = document.getElementById('ps-' + step);
     const st = document.getElementById('pss-' + step);
@@ -711,6 +749,7 @@
     const btn = document.getElementById('runBtn');
     btn.classList.add('loading');
     btn.disabled = true;
+    startStatusPolling();
 
     document.getElementById('emptyState').style.display = 'none';
     document.getElementById('pipelineView').style.display = 'block';
@@ -814,6 +853,7 @@
 
     btn.classList.remove('loading');
     btn.disabled = false;
+    stopStatusPolling();
   }
 
   function renderHistory() {
