@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
@@ -8,7 +8,7 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
     screenshot: 'on',
-    video: 'retain-on-failure',
+    video: 'on',
     trace: 'on',
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     extraHTTPHeaders: {
@@ -24,5 +24,5 @@ export default defineConfig({
       ],
     },
   },
-  reporter: 'json',
+  reporter: [['json'], ['html', { open: 'never' }]],
 });

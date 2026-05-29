@@ -1,17 +1,16 @@
 import express from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 
 const app = express();
 app.use(express.json());
 
-// CORS
+// CORS + COEP/COOP per Trace Viewer
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  // Required for Playwright Trace Viewer (SharedArrayBuffer)
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
@@ -27,12 +26,33 @@ const REPORTS_DIR = '/app/reports';
 fs.mkdirSync(LOCAL_TEST_DIR, { recursive: true });
 fs.mkdirSync(REPORTS_DIR, { recursive: true });
 
+// Mappa testId -> porta show-report
+const reportServers: Map<string, number> = new Map();
+let nextPort = 9300;
+
+function startReportServer(testId: string, reportDir: string): number {
+  // Se già in esecuzione, restituisce la porta
+  if (reportServers.has(testId)) return reportServers.get(testId)!;
+
+  const port = nextPort++;
+  reportServers.set(testId, port);
+
+  const proc = spawn(
+    'npx', ['playwright', 'show-report', reportDir, '--port', String(port), '--host', '0.0.0.0'],
+    { cwd: '/app', detached: true, stdio: 'ignore' }
+  );
+  proc.unref();
+
+  console.log(`[Executor] Report server for ${testId} started on :${port}`);
+  return port;
+}
+
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'executor' }));
 
-// Serve HTML reports statically
-app.use('/reports', express.static(REPORTS_DIR, { index: 'index.html' }));
+// Serve file statici come fallback (screenshot, video, zip trace)
+app.use('/reports', express.static(REPORTS_DIR));
 
-// List last 5 reports
+// Lista ultimi 5 report con porta show-report
 app.get('/reports-list', (_, res) => {
   try {
     if (!fs.existsSync(REPORTS_DIR)) return res.json({ reports: [] });
@@ -44,7 +64,14 @@ app.get('/reports-list', (_, res) => {
       })
       .sort((a, b) => b.mtime - a.mtime)
       .slice(0, 5);
-    res.json({ reports: dirs.map(d => d.id) });
+
+    const reports = dirs.map(d => {
+      const reportDir = path.join(REPORTS_DIR, d.id);
+      const port = startReportServer(d.id, reportDir);
+      return { id: d.id, port };
+    });
+
+    res.json({ reports });
   } catch (e: any) {
     res.json({ reports: [] });
   }
@@ -68,40 +95,39 @@ app.post('/execute', (req, res) => {
 
   console.log(`[Executor] Running test: ${testId}`);
 
+  const env = {
+    ...process.env,
+    PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(jsonResultsDir, 'results.json'),
+    PLAYWRIGHT_HTML_REPORT: reportDir,
+  };
+
+  let passed = false;
+  let output = '';
+  let fullError = '';
+  let results = null;
+
   try {
-    const output = execSync(
+    output = execSync(
       `npx playwright test ${localTestFile} --reporter=json,html`,
-      {
-        cwd: '/app',
-        timeout: 120000,
-        env: {
-          ...process.env,
-          PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(jsonResultsDir, 'results.json'),
-          PLAYWRIGHT_HTML_REPORT: reportDir,
-          PWTEST_SCREENSHOT_DIR: reportDir,
-        }
-      }
+      { cwd: '/app', timeout: 120000, env }
     ).toString();
-
+    passed = true;
     console.log(`[Executor] Test PASSED: ${testId}`);
-    res.json({ success: true, passed: true, output, reportId: testId });
-
   } catch (err: any) {
-    const output = err.stdout?.toString() || err.message;
+    output = err.stdout?.toString() || err.message;
     const stderr = err.stderr?.toString() || '';
-    const fullError = `${output}\n${stderr}`.trim();
-
-    // HTML report is generated even on failure
-    let results = null;
+    fullError = `${output}\n${stderr}`.trim();
+    console.log(`[Executor] Test FAILED: ${testId}`);
     try {
       const jsonPath = path.join(jsonResultsDir, 'results.json');
       if (fs.existsSync(jsonPath)) results = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
     } catch {}
-
-    console.log(`[Executor] Test FAILED: ${testId}`);
-    console.log(`[Executor] Error: ${fullError.slice(0, 500)}`);
-    res.json({ success: true, passed: false, error: fullError, results, reportId: testId });
   }
+
+  // Avvia show-report e restituisce la porta
+  const reportPort = startReportServer(testId, reportDir);
+
+  res.json({ success: true, passed, output, error: fullError, results, reportId: testId, reportPort });
 });
 
 app.listen(3004, () => console.log('[Executor] Running on :3004'));

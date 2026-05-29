@@ -400,7 +400,7 @@
     <line x1="4" y1="14" x2="8" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
     <line x1="20" y1="14" x2="24" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
   </svg>
-  <h1>Playwright Agents <span>v1.9</span></h1>
+  <h1>Playwright Agents <span>v2.0</span></h1>
   <div class="health-bar" id="healthBar">
     <div class="pill" id="pill-orchestrator"><span class="dot"></span>orchestrator</div>
     <div class="pill" id="pill-planner"><span class="dot"></span>planner</div>
@@ -637,13 +637,17 @@
         el.innerHTML = '<div style="color:var(--text2);font-size:.8rem;text-align:center;padding:8px 0">No reports yet</div>';
         return;
       }
-      el.innerHTML = reports.map(id =>
-        `<a href="${execUrl}/reports/${id}/" target="_blank" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--surface2);color:var(--text);text-decoration:none;font-size:.78rem;font-family:monospace;transition:background .15s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
+      const host = new URL(execUrl).hostname;
+      el.innerHTML = reports.map(r => {
+        const id = r.id || r;
+        const port = r.port;
+        const reportUrl = port ? `http://${host}:${port}` : `${execUrl}/reports/${id}/`;
+        return `<a href="${reportUrl}" target="_blank" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--surface2);color:var(--text);text-decoration:none;font-size:.78rem;font-family:monospace;transition:background .15s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
           <span style="font-size:1rem">📋</span>
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${id}</span>
-          <span style="margin-left:auto;font-size:.9rem;opacity:.6">↗</span>
-        </a>`
-      ).join('');
+          ${port ? `<span style="margin-left:auto;font-size:.7rem;color:var(--accent2)">:${port} ↗</span>` : `<span style="margin-left:auto;font-size:.9rem;opacity:.6">↗</span>`}
+        </a>`;
+      }).join('');
     } catch {
       el.innerHTML = '<div style="color:var(--text2);font-size:.8rem;text-align:center;padding:8px 0">Executor offline</div>';
     }
