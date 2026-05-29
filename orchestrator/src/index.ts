@@ -69,7 +69,7 @@ app.post('/run', async (req, res) => {
     // 2. GENERATE
     addLog(`[${testId}] Step 2/4: Generating test code...`);
     runStatus.step = 'generating'; runStatus.activeService = 'generator';
-    const genResp = await axios.post(`${GENERATOR_URL}/generate`, { plan, model });
+    const genResp = await axios.post(`${GENERATOR_URL}/generate`, { plan, baseUrl, model });
     let code = genResp.data.code;
 
     // 3. EXECUTE → HEAL LOOP

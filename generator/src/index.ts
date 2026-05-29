@@ -16,8 +16,9 @@ app.use((req, res, next) => {
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'generator' }));
 
 app.post('/generate', async (req, res) => {
-  const { plan, previousError } = req.body;
+  const { plan, baseUrl: explicitBaseUrl, previousError } = req.body;
   if (!plan) return res.status(400).json({ error: 'plan is required' });
+  const targetBaseUrl = explicitBaseUrl || plan.baseUrl || '';
 
   const errorContext = previousError
     ? `\n\nPrevious attempt failed:\n${previousError}\nFix the issue in the new code.`
@@ -34,6 +35,7 @@ ${errorContext}
 
 Rules:
 - Use @playwright/test imports
+- The base URL is "${targetBaseUrl}" — ALWAYS use this URL in page.goto() calls, never invent or change it
 - Use page.getByRole() or page.getByText() — avoid CSS/href selectors
 - Use { exact: false } for text matching to be more resilient
 - Use toBeAttached() instead of toBeVisible() for elements that may be off-screen
