@@ -10,7 +10,7 @@ services:
   orchestrator:
     build: ./orchestrator
     ports:
-      - "3000:3000"
+      - "3010:3000"
     environment:
       - PLANNER_URL=http://planner:3001
       - GENERATOR_URL=http://generator:3002
