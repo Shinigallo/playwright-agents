@@ -1,7 +1,7 @@
 import express from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync, spawn } from 'child_process';
+import { spawn } from 'child_process';
 
 const app = express();
 app.use(express.json());
@@ -90,7 +90,7 @@ app.get('/reports-list', (_, res) => {
   }
 });
 
-app.post('/execute', (req, res) => {
+app.post('/execute', async (req, res) => {
   const { code, testId } = req.body;
   if (!code || !testId) return res.status(400).json({ error: 'code and testId are required' });
 
@@ -114,28 +114,36 @@ app.post('/execute', (req, res) => {
     PLAYWRIGHT_HTML_REPORT: reportDir,
   };
 
-  let passed = false;
-  let output = '';
-  let fullError = '';
-  let results = null;
+  // Esegue il test in modo asincrono senza bloccare l'event loop
+  const { passed, output, fullError } = await new Promise<{ passed: boolean; output: string; fullError: string }>((resolve) => {
+    let stdout = '';
+    let stderr = '';
+    const proc = spawn(
+      'npx', ['playwright', 'test', localTestFile, '--reporter=json,html'],
+      { cwd: '/app', env, timeout: 120000 }
+    );
+    proc.stdout?.on('data', (d: Buffer) => { stdout += d.toString(); });
+    proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+    proc.on('close', (code) => {
+      if (code === 0) {
+        console.log(`[Executor] Test PASSED: ${testId}`);
+        resolve({ passed: true, output: stdout, fullError: '' });
+      } else {
+        console.log(`[Executor] Test FAILED: ${testId}`);
+        resolve({ passed: false, output: stdout, fullError: `${stdout}\n${stderr}`.trim() });
+      }
+    });
+    proc.on('error', (err) => {
+      console.log(`[Executor] Test ERROR: ${testId} - ${err.message}`);
+      resolve({ passed: false, output: '', fullError: err.message });
+    });
+  });
 
+  let results = null;
   try {
-    output = execSync(
-      `npx playwright test ${localTestFile} --reporter=json,html`,
-      { cwd: '/app', timeout: 120000, env }
-    ).toString();
-    passed = true;
-    console.log(`[Executor] Test PASSED: ${testId}`);
-  } catch (err: any) {
-    output = err.stdout?.toString() || err.message;
-    const stderr = err.stderr?.toString() || '';
-    fullError = `${output}\n${stderr}`.trim();
-    console.log(`[Executor] Test FAILED: ${testId}`);
-    try {
-      const jsonPath = path.join(jsonResultsDir, 'results.json');
-      if (fs.existsSync(jsonPath)) results = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-    } catch {}
-  }
+    const jsonPath = path.join(jsonResultsDir, 'results.json');
+    if (fs.existsSync(jsonPath)) results = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+  } catch {}
 
   // Avvia show-report e restituisce la porta
   const reportPort = startReportServer(testId, reportDir);
