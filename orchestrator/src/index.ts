@@ -5,6 +5,15 @@ import { v4 as uuidv4 } from 'uuid';
 const app = express();
 app.use(express.json());
 
+// CORS — allow browser requests from any origin (frontend on :8089)
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 const PLANNER_URL   = process.env.PLANNER_URL   || 'http://planner:3001';
 const GENERATOR_URL = process.env.GENERATOR_URL || 'http://generator:3002';
 const HEALER_URL    = process.env.HEALER_URL    || 'http://healer:3003';
