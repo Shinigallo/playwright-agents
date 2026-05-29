@@ -4,6 +4,15 @@ import { callLLM } from './llm';
 const app = express();
 app.use(express.json());
 
+// CORS
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'healer' }));
 
 app.post('/heal', async (req, res) => {
