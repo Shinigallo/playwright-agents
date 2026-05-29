@@ -2,6 +2,7 @@ services:
 
   frontend:
     build: ./frontend
+    restart: unless-stopped
     ports:
       - "8089:80"
     networks:
@@ -9,6 +10,7 @@ services:
 
   orchestrator:
     build: ./orchestrator
+    restart: unless-stopped
     ports:
       - "3010:3000"
     environment:
@@ -27,6 +29,7 @@ services:
 
   planner:
     build: ./planner
+    restart: unless-stopped
     expose:
       - "3001"
     environment:
@@ -37,6 +40,7 @@ services:
 
   generator:
     build: ./generator
+    restart: unless-stopped
     expose:
       - "3002"
     environment:
@@ -47,6 +51,7 @@ services:
 
   healer:
     build: ./healer
+    restart: unless-stopped
     expose:
       - "3003"
     environment:
@@ -57,6 +62,7 @@ services:
 
   executor:
     build: ./executor
+    restart: unless-stopped
     expose:
       - "3004"
     volumes:
