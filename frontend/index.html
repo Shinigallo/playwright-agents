@@ -431,6 +431,28 @@
         <input id="orchUrl" type="url" value="http://192.168.8.14:3010" />
       </div>
 
+      <details class="field" id="serviceUrls">
+        <summary style="cursor:pointer;color:var(--text2);font-size:.8rem;user-select:none">⚙ Service URLs</summary>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">Planner</label>
+            <input id="plannerUrl" type="url" value="http://192.168.8.14:3001" />
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">Generator</label>
+            <input id="generatorUrl" type="url" value="http://192.168.8.14:3002" />
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">Healer</label>
+            <input id="healerUrl" type="url" value="http://192.168.8.14:3003" />
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">Executor</label>
+            <input id="executorUrl" type="url" value="http://192.168.8.14:3004" />
+          </div>
+        </div>
+      </details>
+
       <div class="field">
         <label>Model</label>
         <div class="model-select">
@@ -547,12 +569,12 @@
 </main>
 
 <script>
-  const SERVICES = {
-    orchestrator: 3000,
-    planner: 3001,
-    generator: 3002,
-    healer: 3003,
-    executor: 3004
+  const SERVICE_INPUTS = {
+    orchestrator: 'orchUrl',
+    planner: 'plannerUrl',
+    generator: 'generatorUrl',
+    healer: 'healerUrl',
+    executor: 'executorUrl'
   };
 
   let selectedModel = 'gemini-2.0-flash';
@@ -580,16 +602,14 @@
 
   // ── Health checks ──
   async function checkHealth() {
-    const orchUrl = document.getElementById('orchUrl').value.replace(/\/$/, '');
-    const base = new URL(orchUrl);
-
-    for (const [svc, port] of Object.entries(SERVICES)) {
+    for (const [svc, inputId] of Object.entries(SERVICE_INPUTS)) {
       const pill = document.getElementById('pill-' + svc);
+      const inputEl = document.getElementById(inputId);
+      if (!inputEl) continue;
+      const url = inputEl.value.replace(/\/$/, '') + '/health';
       try {
-        const url = `${base.protocol}//${base.hostname}:${port}/health`;
         const r = await fetch(url, { signal: AbortSignal.timeout(2000) });
-        const ok = r.ok;
-        pill.className = 'pill ' + (ok ? 'ok' : 'err');
+        pill.className = 'pill ' + (r.ok ? 'ok' : 'err');
       } catch {
         pill.className = 'pill err';
       }
