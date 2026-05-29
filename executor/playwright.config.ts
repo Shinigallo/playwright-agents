@@ -7,6 +7,9 @@ export default defineConfig({
     headless: true,
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
+    screenshot: 'on',
+    video: 'retain-on-failure',
+    trace: 'on',
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
     extraHTTPHeaders: {
       'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',

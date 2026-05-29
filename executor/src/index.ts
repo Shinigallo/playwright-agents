@@ -74,6 +74,7 @@ app.post('/execute', (req, res) => {
           ...process.env,
           PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(jsonResultsDir, 'results.json'),
           PLAYWRIGHT_HTML_REPORT: reportDir,
+          PWTEST_SCREENSHOT_DIR: reportDir,
         }
       }
     ).toString();
@@ -86,6 +87,7 @@ app.post('/execute', (req, res) => {
     const stderr = err.stderr?.toString() || '';
     const fullError = `${output}\n${stderr}`.trim();
 
+    // HTML report is generated even on failure
     let results = null;
     try {
       const jsonPath = path.join(jsonResultsDir, 'results.json');
