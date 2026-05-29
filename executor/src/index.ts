@@ -8,21 +8,10 @@ app.use(express.json());
 
 const TESTS_DIR = '/shared/tests';
 const RESULTS_DIR = '/shared/results';
-const CONFIG_FILE = '/app/playwright.config.ts';
+const LOCAL_TEST_DIR = '/app/tests';
 
-// Write a minimal playwright config pointing to /shared/tests
-const playwrightConfig = `
-import { defineConfig } from '@playwright/test';
-export default defineConfig({
-  testDir: '${TESTS_DIR}',
-  timeout: 60000,
-  use: {
-    headless: true,
-    viewport: { width: 1280, height: 720 },
-  },
-});
-`;
-fs.writeFileSync(CONFIG_FILE, playwrightConfig);
+// Ensure local test dir exists
+fs.mkdirSync(LOCAL_TEST_DIR, { recursive: true });
 
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'executor' }));
 
@@ -33,19 +22,25 @@ app.post('/execute', (req, res) => {
     return res.status(400).json({ error: 'code and testId are required' });
   }
 
-  const testFile = path.join(TESTS_DIR, `${testId}.spec.ts`);
+  // Write test locally (Playwright can only resolve local paths)
+  const localTestFile = path.join(LOCAL_TEST_DIR, `${testId}.spec.ts`);
   const reportDir = path.join(RESULTS_DIR, testId);
 
-  fs.mkdirSync(TESTS_DIR, { recursive: true });
+  fs.mkdirSync(RESULTS_DIR, { recursive: true });
   fs.mkdirSync(reportDir, { recursive: true });
-  fs.writeFileSync(testFile, code);
+  fs.writeFileSync(localTestFile, code);
+
+  // Also save to shared volume for inspection
+  fs.mkdirSync(TESTS_DIR, { recursive: true });
+  fs.writeFileSync(path.join(TESTS_DIR, `${testId}.spec.ts`), code);
 
   console.log(`[Executor] Running test: ${testId}`);
 
   try {
     const output = execSync(
-      `npx playwright test --config=${CONFIG_FILE} ${testFile} --reporter=json`,
+      `npx playwright test ${localTestFile} --reporter=json`,
       {
+        cwd: '/app',
         timeout: 120000,
         env: {
           ...process.env,
