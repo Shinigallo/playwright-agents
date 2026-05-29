@@ -17,7 +17,7 @@ services:
       - PLANNER_URL=http://planner:3001
       - GENERATOR_URL=http://generator:3002
       - HEALER_URL=http://healer:3003
-      - EXECUTOR_URL=http://127.0.0.1:3004
+      - EXECUTOR_URL=http://192.168.8.14:3004
       - MAX_HEAL_ATTEMPTS=3
     depends_on:
       - planner
