@@ -26,10 +26,13 @@ ERROR:
 ${error}
 
 Common fixes:
-- Update selectors if element not found
-- Add missing waits for dynamic content
-- Fix assertion values
-- Handle popups, modals, or navigation timing
+- Prefer page.getByRole() or page.getByText() over attribute selectors
+- Use { exact: false } for text matching to handle partial matches
+- Replace toBeVisible() with toBeAttached() for off-screen elements
+- Add await page.waitForLoadState('domcontentloaded') after goto
+- Use first() to handle multiple matching elements
+- Avoid href-based selectors — use text content instead
+- If an element is in the DOM but not visible, use toBeAttached() instead of toBeVisible()
 
 Return ONLY the fixed TypeScript code, no explanation, no markdown fences.`);
 
