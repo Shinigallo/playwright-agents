@@ -475,6 +475,13 @@
         <div style="color:var(--text2);font-size:.8rem;text-align:center;padding:16px 0">No runs yet</div>
       </div>
     </div>
+
+    <div class="card">
+      <h2>📊 Reports</h2>
+      <div id="reportsList" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        <div style="color:var(--text2);font-size:.8rem;text-align:center;padding:8px 0">Loading…</div>
+      </div>
+    </div>
   </aside>
 
   <section>
@@ -618,6 +625,32 @@
 
   checkHealth();
   setInterval(checkHealth, 10000);
+
+  // ── Reports list ──
+  async function loadReports() {
+    const execUrl = document.getElementById('executorUrl').value.replace(/\/$/, '');
+    const el = document.getElementById('reportsList');
+    try {
+      const r = await fetch(`${execUrl}/reports-list`, { signal: AbortSignal.timeout(3000) });
+      const { reports } = await r.json();
+      if (!reports || reports.length === 0) {
+        el.innerHTML = '<div style="color:var(--text2);font-size:.8rem;text-align:center;padding:8px 0">No reports yet</div>';
+        return;
+      }
+      el.innerHTML = reports.map(id =>
+        `<a href="${execUrl}/reports/${id}/" target="_blank" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;background:var(--surface2);color:var(--text);text-decoration:none;font-size:.78rem;font-family:monospace;transition:background .15s" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='var(--surface2)'">
+          <span style="font-size:1rem">📋</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${id}</span>
+          <span style="margin-left:auto;font-size:.9rem;opacity:.6">↗</span>
+        </a>`
+      ).join('');
+    } catch {
+      el.innerHTML = '<div style="color:var(--text2);font-size:.8rem;text-align:center;padding:8px 0">Executor offline</div>';
+    }
+  }
+
+  loadReports();
+  setInterval(loadReports, 15000);
 
   // ── Pipeline state helpers ──
   function setPipelineStep(step, state, status) {
@@ -772,6 +805,7 @@
         result
       });
       renderHistory();
+      loadReports();
 
     } catch (err) {
       appendLog('❌ Error: ' + err.message);
