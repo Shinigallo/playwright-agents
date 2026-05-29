@@ -3,7 +3,7 @@ services:
   frontend:
     build: ./frontend
     ports:
-      - "8080:80"
+      - "8089:80"
     networks:
       - agents-net
 
