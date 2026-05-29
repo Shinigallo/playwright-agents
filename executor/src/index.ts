@@ -8,6 +8,21 @@ app.use(express.json());
 
 const TESTS_DIR = '/shared/tests';
 const RESULTS_DIR = '/shared/results';
+const CONFIG_FILE = '/app/playwright.config.ts';
+
+// Write a minimal playwright config pointing to /shared/tests
+const playwrightConfig = `
+import { defineConfig } from '@playwright/test';
+export default defineConfig({
+  testDir: '${TESTS_DIR}',
+  timeout: 60000,
+  use: {
+    headless: true,
+    viewport: { width: 1280, height: 720 },
+  },
+});
+`;
+fs.writeFileSync(CONFIG_FILE, playwrightConfig);
 
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'executor' }));
 
@@ -21,6 +36,7 @@ app.post('/execute', (req, res) => {
   const testFile = path.join(TESTS_DIR, `${testId}.spec.ts`);
   const reportDir = path.join(RESULTS_DIR, testId);
 
+  fs.mkdirSync(TESTS_DIR, { recursive: true });
   fs.mkdirSync(reportDir, { recursive: true });
   fs.writeFileSync(testFile, code);
 
@@ -28,10 +44,13 @@ app.post('/execute', (req, res) => {
 
   try {
     const output = execSync(
-      `npx playwright test ${testFile} --reporter=json --output=${reportDir}`,
+      `npx playwright test --config=${CONFIG_FILE} ${testFile} --reporter=json`,
       {
         timeout: 120000,
-        env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(reportDir, 'results.json') }
+        env: {
+          ...process.env,
+          PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(reportDir, 'results.json')
+        }
       }
     ).toString();
 
@@ -43,7 +62,6 @@ app.post('/execute', (req, res) => {
     const stderr = err.stderr?.toString() || '';
     const fullError = `${output}\n${stderr}`.trim();
 
-    // Try to read JSON results
     let results = null;
     try {
       const jsonPath = path.join(reportDir, 'results.json');
@@ -53,6 +71,7 @@ app.post('/execute', (req, res) => {
     } catch {}
 
     console.log(`[Executor] Test FAILED: ${testId}`);
+    console.log(`[Executor] Error: ${fullError.slice(0, 500)}`);
     res.json({ success: true, passed: false, error: fullError, results });
   }
 });
