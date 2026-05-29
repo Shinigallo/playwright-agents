@@ -3,6 +3,9 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "8089:80"
     networks:
@@ -11,6 +14,9 @@ services:
   orchestrator:
     build: ./orchestrator
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     ports:
       - "3010:3000"
     environment:
@@ -30,6 +36,9 @@ services:
   planner:
     build: ./planner
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     expose:
       - "3001"
     environment:
@@ -41,6 +50,9 @@ services:
   generator:
     build: ./generator
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     expose:
       - "3002"
     environment:
@@ -52,6 +64,9 @@ services:
   healer:
     build: ./healer
     restart: unless-stopped
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     expose:
       - "3003"
     environment:
