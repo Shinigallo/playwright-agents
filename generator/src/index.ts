@@ -25,8 +25,12 @@ ${errorContext}
 
 Rules:
 - Use @playwright/test imports
-- Use robust selectors (prefer role, text, label over CSS)
-- Add reasonable timeouts and waits
+- Use page.getByRole() or page.getByText() — avoid CSS/href selectors
+- Use { exact: false } for text matching to be more resilient
+- Use toBeAttached() instead of toBeVisible() for elements that may be off-screen
+- Use .first() when multiple elements might match
+- Use waitUntil: 'domcontentloaded' in page.goto()
+- Add reasonable timeouts (30000ms for goto, 10000ms for assertions)
 - Return ONLY the TypeScript code, no explanation, no markdown fences.`);
 
     code = code.replace(/^```typescript\n?/, '').replace(/^```ts\n?/, '').replace(/^```\n?/, '').replace(/```$/, '').trim();
