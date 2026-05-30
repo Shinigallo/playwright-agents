@@ -1,16 +1,52 @@
+# ============================================================
+# docker-compose.yml — Playwright AI Agents Stack
+# ============================================================
+# Definisce 6 container che formano il sistema di generazione
+# e testing automatico con AI:
+#
+#   frontend     → UI statica nginx (porta 8089)
+#   orchestrator → Coordinatore pipeline (porta 3010)
+#   planner      → Agente pianificazione (porta 13001)
+#   generator    → Agente generazione codice (porta 13002)
+#   healer       → Agente correzione errori (porta 13003)
+#   executor     → Esecuzione test Playwright (porta 3004 + 9300-9320)
+#
+# NETWORK: tutti i container comunicano sulla rete interna "agents-net"
+# usando il nome del container come hostname (es. http://planner:3001).
+# Le porte esterne sono diverse da quelle interne su PiNas per evitare
+# conflitti con altri container (jellystat, jellysweep, jellyswarm).
+#
+# DNS: tutti i container usano Google DNS (8.8.8.8) per evitare problemi
+# con resolver Pi-hole o router che non risolvono hostname pubblici.
+# ============================================================
+
 services:
 
+  # ─────────────────────────────────────────────────────────
+  # FRONTEND — UI statica servita da nginx
+  # ─────────────────────────────────────────────────────────
+  # Dashboard web per interagire con il sistema:
+  # - Inserimento prompt e URL
+  # - Visualizzazione stato live del pipeline
+  # - Log in streaming
+  # - Lista report con link al Trace Viewer
   frontend:
     build: ./frontend
-    restart: unless-stopped
+    restart: unless-stopped  # si riavvia automaticamente in caso di crash
     dns:
       - 8.8.8.8
       - 1.1.1.1
     ports:
-      - "8089:80"
+      - "8089:80"  # porta 80 interna → 8089 esterna (evita conflitti con altri servizi)
     networks:
       - agents-net
 
+  # ─────────────────────────────────────────────────────────
+  # ORCHESTRATOR — Cervello del sistema
+  # ─────────────────────────────────────────────────────────
+  # Riceve le richieste dal frontend e coordina il pipeline:
+  # Planner → Generator → Executor (→ Healer loop)
+  # Espone anche GET /status per il polling live dal frontend.
   orchestrator:
     build: ./orchestrator
     restart: unless-stopped
@@ -18,12 +54,14 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     ports:
-      - "3010:3000"
+      - "3010:3000"  # porta 3000 interna → 3010 esterna (3000 occupata da jellystat su PiNas)
     environment:
+      # URL dei microservizi — usano i nomi container come hostname (Docker DNS interno)
       - PLANNER_URL=http://planner:3001
       - GENERATOR_URL=http://generator:3002
       - HEALER_URL=http://healer:3003
       - EXECUTOR_URL=http://executor:3004
+      # Numero massimo di tentativi di auto-healing prima di arrendersi
       - MAX_HEAL_ATTEMPTS=3
     depends_on:
       - planner
@@ -33,6 +71,11 @@ services:
     networks:
       - agents-net
 
+  # ─────────────────────────────────────────────────────────
+  # PLANNER — Agente di pianificazione (LLM: Gemini)
+  # ─────────────────────────────────────────────────────────
+  # Riceve il prompt in linguaggio naturale e produce un piano
+  # di test strutturato in JSON con titolo, URL e lista di step.
   planner:
     build: ./planner
     restart: unless-stopped
@@ -40,15 +83,21 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     expose:
-      - "3001"
+      - "3001"  # visibile solo agli altri container sulla rete interna
     ports:
-      - "13001:3001"
+      - "13001:3001"  # esposta anche esternamente per health check dal frontend
+                      # (3001 sarebbe libera ma usiamo 13xxx per coerenza e sicurezza)
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - MODEL=${MODEL:-gemini-2.0-flash}  # or gemini-2.5-pro / gemini-3.0-ultra
+      - GEMINI_API_KEY=${GEMINI_API_KEY}  # letto da .env nel progetto
+      - MODEL=${MODEL:-gemini-2.0-flash}  # override opzionale: gemini-2.5-pro / gemini-3.0-ultra
     networks:
       - agents-net
 
+  # ─────────────────────────────────────────────────────────
+  # GENERATOR — Agente di generazione codice (LLM: Gemini)
+  # ─────────────────────────────────────────────────────────
+  # Riceve il piano JSON e genera codice TypeScript Playwright
+  # completo e pronto per l'esecuzione.
   generator:
     build: ./generator
     restart: unless-stopped
@@ -58,13 +107,18 @@ services:
     expose:
       - "3002"
     ports:
-      - "13002:3002"
+      - "13002:3002"  # 3002 occupata da jellysweep su PiNas → mappata su 13002
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - MODEL=${MODEL:-gemini-2.0-flash}  # or gemini-2.5-pro / gemini-3.0-ultra
+      - MODEL=${MODEL:-gemini-2.0-flash}
     networks:
       - agents-net
 
+  # ─────────────────────────────────────────────────────────
+  # HEALER — Agente di auto-correzione (LLM: Gemini)
+  # ─────────────────────────────────────────────────────────
+  # Interviene solo se il test fallisce. Analizza il codice
+  # fallito + l'errore di Playwright e genera una versione corretta.
   healer:
     build: ./healer
     restart: unless-stopped
@@ -74,34 +128,53 @@ services:
     expose:
       - "3003"
     ports:
-      - "13003:3003"
+      - "13003:3003"  # 3003 occupata da jellyswarm su PiNas → mappata su 13003
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - MODEL=${MODEL:-gemini-2.0-flash}  # or gemini-2.5-pro / gemini-3.0-ultra
+      - MODEL=${MODEL:-gemini-2.0-flash}
     networks:
       - agents-net
 
+  # ─────────────────────────────────────────────────────────
+  # EXECUTOR — Esecuzione test Playwright (con browser reale)
+  # ─────────────────────────────────────────────────────────
+  # UNICO container che usa l'immagine Playwright con Chromium
+  # pre-installato. Tutti gli altri usano node:20-slim.
+  # Esegue i .spec.ts, genera report HTML con Trace Viewer,
+  # e serve ogni report su una porta dedicata (9300-9320).
   executor:
     build: ./executor
     restart: unless-stopped
     expose:
       - "3004"
     ports:
-      - "3004:3004"
-      - "9300-9320:9300-9320"
+      - "3004:3004"        # API principale
+      - "9300-9320:9300-9320"  # porta range per i server show-report (Trace Viewer)
     dns:
-      - 8.8.8.8
+      - 8.8.8.8   # richiesto per accedere ai siti web dall'interno del container
       - 1.1.1.1
     volumes:
-      - shared-tests:/shared/tests
-      - shared-results:/shared/results
+      # Volumi condivisi per ispezionare i file generati dall'host
+      - shared-tests:/shared/tests      # .spec.ts scritti durante i run
+      - shared-results:/shared/results  # risultati JSON di Playwright
     networks:
       - agents-net
 
+# ─────────────────────────────────────────────────────────
+# VOLUMI — Persistenti tra restart del container
+# ─────────────────────────────────────────────────────────
+# I volumi mantengono i test e i risultati tra restart del container.
+# Utili per debuggare i .spec.ts generati dall'AI senza accedere al container.
 volumes:
-  shared-tests:
-  shared-results:
+  shared-tests:   # codice TypeScript generato dall'AI
+  shared-results: # risultati JSON dei run Playwright
 
+# ─────────────────────────────────────────────────────────
+# NETWORK — Rete bridge interna
+# ─────────────────────────────────────────────────────────
+# Tutti i container comunicano sulla rete interna usando i
+# nomi container come hostname (Docker DNS integrato).
+# Es: http://planner:3001, http://executor:3004
 networks:
   agents-net:
     driver: bridge
