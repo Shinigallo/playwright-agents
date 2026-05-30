@@ -170,7 +170,7 @@ app.post('/run', async (req, res) => {
 
     const planResp = await axios.post(`${PLANNER_URL}/plan`, { prompt, baseUrl, model });
     const { plan } = planResp.data;
-    addLog(`[${testId}] Plan: ${plan.title} (${plan.steps.length} steps)`);
+    addLog(`[${testId}] Plan: ${plan.title} (${plan.tests?.length ?? 0} test cases)`);
 
     // -----------------------------------------------------------------------
     // STEP 2 — CODE GENERATION

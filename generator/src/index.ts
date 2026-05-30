@@ -1,19 +1,16 @@
 /**
  * ============================================================
- * GENERATOR — Agente di generazione codice
+ * GENERATOR — Agente di generazione suite di test
  * ============================================================
  * Secondo agente della pipeline. Riceve il piano JSON strutturato
- * prodotto dal Planner e lo trasforma in codice TypeScript
- * Playwright completo e pronto per essere eseguito.
- *
- * Il codice generato:
- *   - Usa @playwright/test come framework di test
- *   - Segue le best practice Playwright per selettori robusti
- *   - Include timeout adeguati per evitare flakiness
- *   - Usa l'URL base esatto passato dall'utente
+ * prodotto dal Planner e lo trasforma in una suite TypeScript
+ * Playwright completa con:
+ *   - Un blocco test.describe() per l'intera suite
+ *   - Un blocco test() per ogni test case nel piano
+ *   - Ogni test è indipendente (naviga da zero, nessuno stato condiviso)
  *
  * Endpoint esposti:
- *   POST /generate → genera il codice TypeScript
+ *   POST /generate → genera il file TypeScript della suite
  *   GET  /health   → health check
  *
  * Porta interna: 3002 | Porta esterna su PiNas: 13002
@@ -26,9 +23,6 @@ import { callLLM } from './llm';
 const app = express();
 app.use(express.json());
 
-// ---------------------------------------------------------------------------
-// CORS — necessario per i health check dal frontend (cross-origin)
-// ---------------------------------------------------------------------------
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
@@ -41,55 +35,51 @@ app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'generator' }));
 
 /**
  * POST /generate
- * Genera codice TypeScript Playwright a partire dal piano strutturato.
+ * Genera una suite TypeScript Playwright a partire dal piano strutturato.
  *
- * Body atteso:
- *   { plan: TestPlan, baseUrl?: string, model?: string, previousError?: string }
+ * Body: { plan: TestSuitePlan, baseUrl?: string, model?: string }
  *
- * - plan          : piano JSON prodotto dal Planner
- * - baseUrl       : URL base esplicito (priorità su plan.baseUrl)
- * - model         : modello Gemini da usare (opzionale)
- * - previousError : errore del tentativo precedente (usato dal Healer come fallback)
- *
- * Risposta:
- *   { success: true, code: string } — codice TypeScript pronto per l'esecuzione
- *
- * NOTA su baseUrl: viene passato sia nell'oggetto plan che come campo esplicito.
- * Il campo esplicito ha priorità per garantire che l'URL dell'utente non venga
- * mai sovrascritto o ignorato dall'LLM (vedi pitfall nel skill).
+ * Risposta: { success: true, code: string }
+ * Il codice contiene un test.describe() con N test() block,
+ * uno per ogni test case nel piano.
  */
 app.post('/generate', async (req, res) => {
-  const { plan, baseUrl: explicitBaseUrl, previousError } = req.body;
-
+  const { plan, baseUrl: explicitBaseUrl } = req.body;
   if (!plan) return res.status(400).json({ error: 'plan is required' });
 
-  // Determina l'URL base da usare: esplicito dall'orchestrator > nel piano > vuoto
+  // L'URL esplicito ha priorità su quello nel piano per sicurezza
   const targetBaseUrl = explicitBaseUrl || plan.baseUrl || '';
 
-  // Se viene passato un errore precedente, viene incluso nel prompt come contesto
-  // aggiuntivo per guidare il modello a evitare lo stesso pattern sbagliato
-  const errorContext = previousError
-    ? `\n\nPrevious attempt failed:\n${previousError}\nFix the issue in the new code.`
-    : '';
-
   try {
-    console.log(`[Generator] Generating test for: "${plan.title}"`);
+    console.log(`[Generator] Generating suite for: "${plan.title}" (${plan.tests?.length ?? 0} tests)`);
 
-    // Il prompt include il piano completo in JSON e regole precise per la generazione.
-    // Le regole sono fondamentali per ridurre i fallimenti al primo tentativo:
-    //   - getByRole/getByText invece di selettori CSS (più robusti ai cambi di stile)
-    //   - toBeAttached() per elementi fuori viewport (evita timeout su nav mobile)
-    //   - .first() per elementi duplicati (es. link nel menu desktop e mobile)
-    //   - domcontentloaded invece di load per pagine pesanti
     let code = await callLLM(`You are a Playwright test code generator.
-Generate a complete, runnable Playwright TypeScript test based on this plan:
+Generate a complete TypeScript Playwright TEST SUITE based on this plan:
 
 ${JSON.stringify(plan, null, 2)}
-${errorContext}
+
+REQUIRED STRUCTURE — use exactly this pattern:
+\`\`\`
+import { test, expect } from '@playwright/test';
+
+test.describe('<suite title>', () => {
+  test('should ...', async ({ page }) => {
+    // steps for test case 1
+  });
+
+  test('should ...', async ({ page }) => {
+    // steps for test case 2
+  });
+
+  // one test() block per test case in the plan
+});
+\`\`\`
 
 Rules:
-- Use @playwright/test imports
-- The base URL is "${targetBaseUrl}" — ALWAYS use this URL in page.goto() calls, never invent or change it
+- ONE test.describe() block wrapping ALL tests
+- ONE test() block per test case — do NOT merge them into a single test
+- Each test() must be fully independent: always start with page.goto()
+- The base URL is "${targetBaseUrl}" — ALWAYS use this URL in page.goto(), never invent or change it
 - Use page.getByRole() or page.getByText() — avoid CSS/href selectors
 - Use { exact: false } for text matching to be more resilient
 - Use toBeAttached() instead of toBeVisible() for elements that may be off-screen
@@ -98,8 +88,7 @@ Rules:
 - Add reasonable timeouts (30000ms for goto, 10000ms for assertions)
 - Return ONLY the TypeScript code, no explanation, no markdown fences.`);
 
-    // Pulizia: rimuove eventuali markdown fences che Gemini aggiunge nonostante
-    // le istruzioni esplicite nel prompt ("Return ONLY the TypeScript code")
+    // Rimuove eventuali markdown fences dalla risposta Gemini
     code = code
       .replace(/^```typescript\n?/, '')
       .replace(/^```ts\n?/, '')
@@ -107,7 +96,7 @@ Rules:
       .replace(/```$/, '')
       .trim();
 
-    console.log(`[Generator] Code generated (${code.length} chars)`);
+    console.log(`[Generator] Suite generated (${code.length} chars)`);
     res.json({ success: true, code });
 
   } catch (error: any) {
