@@ -428,7 +428,7 @@
 
       <div class="field">
         <label>Orchestrator URL</label>
-        <input id="orchUrl" type="url" value="http://192.168.8.14:3010" />
+        <input id="orchUrl" type="url" value="/api" />
       </div>
 
       <details class="field" id="serviceUrls">
@@ -436,19 +436,19 @@
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
           <div>
             <label style="font-size:.72rem;color:var(--text2)">Planner</label>
-            <input id="plannerUrl" type="url" value="http://192.168.8.14:13001" />
+            <input id="plannerUrl" type="url" value="/api/planner-status" />
           </div>
-          <div>
-            <label style="font-size:.72rem;color:var(--text2)">Generator</label>
-            <input id="generatorUrl" type="url" value="http://192.168.8.14:13002" />
+          <div class="field">
+            <label>Generator URL</label>
+            <input id="generatorUrl" type="url" value="/api/generator-status" />
           </div>
-          <div>
-            <label style="font-size:.72rem;color:var(--text2)">Healer</label>
-            <input id="healerUrl" type="url" value="http://192.168.8.14:13003" />
+          <div class="field">
+            <label>Healer URL</label>
+            <input id="healerUrl" type="url" value="/api/healer-status" />
           </div>
-          <div>
-            <label style="font-size:.72rem;color:var(--text2)">Executor</label>
-            <input id="executorUrl" type="url" value="http://192.168.8.14:3004" />
+          <div class="field">
+            <label>Executor URL</label>
+            <input id="executorUrl" type="url" value="/executor" />
           </div>
         </div>
       </details>
@@ -637,7 +637,7 @@
         el.innerHTML = '<div style="color:var(--text2);font-size:.8rem;text-align:center;padding:8px 0">No reports yet</div>';
         return;
       }
-      const host = new URL(execUrl).hostname;
+      const host = execUrl.startsWith('http') ? new URL(execUrl).hostname : window.location.hostname;
       el.innerHTML = reports.map(r => {
         const id = r.id || r;
         const port = r.port;

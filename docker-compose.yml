@@ -4,17 +4,18 @@
 # Definisce 6 container che formano il sistema di generazione
 # e testing automatico con AI:
 #
-#   frontend     → UI statica nginx (porta 8089)
-#   orchestrator → Coordinatore pipeline (porta 3010)
-#   planner      → Agente pianificazione (porta 13001)
-#   generator    → Agente generazione codice (porta 13002)
-#   healer       → Agente correzione errori (porta 13003)
+#   frontend     → UI statica nginx (porta 8089, reverse proxy verso /api/ e /executor/)
+#   orchestrator → Coordinatore pipeline (solo interno, via nginx /api/)
+#   planner      → Agente pianificazione (solo interno)
+#   generator    → Agente generazione codice (solo interno)
+#   healer       → Agente correzione errori (solo interno)
 #   executor     → Esecuzione test Playwright (porta 3004 + 9300-9320)
 #
 # NETWORK: tutti i container comunicano sulla rete interna "agents-net"
 # usando il nome del container come hostname (es. http://planner:3001).
-# Le porte esterne sono diverse da quelle interne su PiNas per evitare
-# conflitti con altri container (jellystat, jellysweep, jellyswarm).
+# Le porte esterne sono ridotte al minimo: solo frontend (8089) ed executor (3004, 9300-9320).
+# Orchestrator, planner, generator e healer comunicano solo sulla rete interna agents-net.
+# Il browser raggiunge orchestrator tramite nginx (/api/) ed executor tramite nginx (/executor/).
 #
 # DNS: tutti i container usano Google DNS (8.8.8.8) per evitare problemi
 # con resolver Pi-hole o router che non risolvono hostname pubblici.
@@ -37,7 +38,10 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     ports:
-      - "8089:80"  # porta 80 interna → 8089 esterna (evita conflitti con altri servizi)
+      - "8089:80"  # unico punto di accesso esterno — nginx serve il frontend e fa proxy verso orchestrator/executor
+    depends_on:
+      - orchestrator
+      - executor
     networks:
       - agents-net
 
@@ -53,8 +57,8 @@ services:
     dns:
       - 8.8.8.8
       - 1.1.1.1
-    ports:
-      - "3010:3000"  # porta 3000 interna → 3010 esterna (3000 occupata da jellystat su PiNas)
+    expose:
+      - "3000"  # solo interno — nginx fa proxy /api/ → orchestrator:3000
     environment:
       # URL dei microservizi — usano i nomi container come hostname (Docker DNS interno)
       - PLANNER_URL=http://planner:3001
@@ -83,10 +87,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     expose:
-      - "3001"  # visibile solo agli altri container sulla rete interna
-    ports:
-      - "13001:3001"  # esposta anche esternamente per health check dal frontend
-                      # (3001 sarebbe libera ma usiamo 13xxx per coerenza e sicurezza)
+      - "3001"  # solo interno — chiamato dall'orchestrator via http://planner:3001
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}  # letto da .env nel progetto
       - MODEL=${MODEL:-gemini-2.0-flash}  # override opzionale: gemini-2.5-pro / gemini-3.0-ultra
@@ -105,9 +106,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     expose:
-      - "3002"
-    ports:
-      - "13002:3002"  # 3002 occupata da jellysweep su PiNas → mappata su 13002
+      - "3002"  # solo interno — chiamato dall'orchestrator via http://generator:3002
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MODEL=${MODEL:-gemini-2.0-flash}
@@ -126,9 +125,7 @@ services:
       - 8.8.8.8
       - 1.1.1.1
     expose:
-      - "3003"
-    ports:
-      - "13003:3003"  # 3003 occupata da jellyswarm su PiNas → mappata su 13003
+      - "3003"  # solo interno — chiamato dall'orchestrator via http://healer:3003
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - MODEL=${MODEL:-gemini-2.0-flash}
