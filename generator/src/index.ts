@@ -53,10 +53,18 @@ app.post('/generate', async (req, res) => {
   try {
     console.log(`[Generator] Generating suite for: "${plan.title}" (${plan.tests?.length ?? 0} tests)`);
 
+    // Il pageSnapshot contiene gli elementi DOM reali estratti dal Planner visitando la pagina.
+    // Lo passiamo al LLM così può generare selettori basati sul testo reale degli elementi,
+    // non su supposizioni. Se non è presente (piano vecchio), si usa stringa vuota.
+    const snapshotContext = plan.pageSnapshot
+      ? `\nACTUAL PAGE ELEMENTS (extracted via Playwright DOM inspection):\n--- PAGE SNAPSHOT ---\n${plan.pageSnapshot}\n--- END SNAPSHOT ---\nUse the real text from this snapshot for selectors — do NOT invent CSS classes or IDs.\nIf you see a COOKIE_BANNER entry, add a cookie dismissal try/catch after every page.goto().\n`
+      : '';
+
     let code = await callLLM(`You are a Playwright test code generator.
 Generate a complete TypeScript Playwright TEST SUITE based on this plan:
 
 ${JSON.stringify(plan, null, 2)}
+${snapshotContext}
 
 REQUIRED STRUCTURE — use exactly this pattern:
 \`\`\`

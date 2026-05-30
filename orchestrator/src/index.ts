@@ -174,9 +174,10 @@ app.post('/run', async (req, res) => {
 
     // -----------------------------------------------------------------------
     // STEP 2 — CODE GENERATION
-    // Il Generator riceve il piano JSON e genera codice TypeScript Playwright
-    // pronto per essere eseguito. baseUrl viene passato esplicitamente per
-    // garantire che il codice usi sempre l'URL corretto (vedi pitfall nel skill).
+    // Il Generator riceve il piano JSON (che include il pageSnapshot del DOM reale
+    // estratto dal Planner) e genera codice TypeScript Playwright pronto per essere
+    // eseguito. baseUrl viene passato esplicitamente per garantire che il codice
+    // usi sempre l'URL corretto (vedi pitfall nel skill).
     // -----------------------------------------------------------------------
     addLog(`[${testId}] Step 2/4: Generating test code...`);
     runStatus.step = 'generating';
@@ -236,6 +237,7 @@ app.post('/run', async (req, res) => {
           code,
           error: lastError,
           plan,
+          pageSnapshot: plan.pageSnapshot, // snapshot DOM reale dalla visita del Planner
           model,
         });
         code = healResp.data.code; // il codice corretto diventa input del prossimo tentativo

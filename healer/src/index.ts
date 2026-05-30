@@ -65,7 +65,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'healer' }));
  *   { success: true, code: string } — codice corretto pronto per un nuovo tentativo
  */
 app.post('/heal', async (req, res) => {
-  const { code, error, plan } = req.body;
+  const { code, error, plan, pageSnapshot } = req.body;
 
   if (!code || !error) {
     return res.status(400).json({ error: 'code and error are required' });
@@ -73,6 +73,13 @@ app.post('/heal', async (req, res) => {
 
   try {
     console.log(`[Healer] Fixing error: ${error.substring(0, 100)}...`);
+
+    // Il pageSnapshot contiene gli elementi DOM reali estratti dal Planner.
+    // Se disponibile, lo forniamo all'LLM così può correggere selettori
+    // basandosi su ciò che esiste davvero nella pagina.
+    const snapshotContext = pageSnapshot
+      ? `\nACTUAL PAGE ELEMENTS (extracted via Playwright DOM inspection):\n--- PAGE SNAPSHOT ---\n${pageSnapshot}\n--- END SNAPSHOT ---\nUse the real text from this snapshot to fix broken selectors.\nIf you see a COOKIE_BANNER entry, make sure the dismissal try/catch is present after every page.goto().\n`
+      : '';
 
     // ---------------------------------------------------------------------------
     // Il prompt include: piano originale (contesto), codice fallito, errore specifico,
@@ -91,6 +98,7 @@ app.post('/heal', async (req, res) => {
       'ORIGINAL PLAN:',
       JSON.stringify(plan, null, 2),
       '',
+      snapshotContext,
       'FAILED CODE:',
       code,
       '',
