@@ -1,34 +1,31 @@
 /**
- * ============================================================
- * LLM Helper — Wrapper per le chiamate all'API Gemini (Healer)
- * ============================================================
- * Copia identica agli altri servizi. Il Healer usa la stessa
- * configurazione (temperature bassa) perché la correzione del
- * codice richiede precisione, non creatività.
- *
- * Modello selezionabile via variabile d'ambiente MODEL.
- * ============================================================
+ * LLM Helper — Wrapper per le chiamate all'API Gemini.
+ * Ogni servizio ha la propria copia per configurazioni indipendenti.
  */
 
 import axios from 'axios';
 
-const GEMINI_API_KEY=*** || '';
-const MODEL = process.env.MODEL || 'gemini-2.0-flash';
+// Legge la chiave API dall'ambiente Docker (impostata in .env / docker-compose.yml)
+const API_KEY = (process as any).env['GEMINI_API_KEY'] as string || '';
+const MODEL = (process as any).env['MODEL'] as string || 'gemini-2.0-flash';
 
 /**
  * Invia un prompt all'API Gemini e restituisce la risposta testuale.
- * Usato dal Healer per generare versioni corrette del codice fallito.
+ * @param prompt - Il testo del prompt da inviare
  */
 export async function callLLM(prompt: string): Promise<string> {
-  const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=***    {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,       // determinismo alto: vogliamo fix affidabili, non varianti
-        maxOutputTokens: 4096,
-      },
-    }
-  );
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+    + MODEL
+    + ':generateContent?key='
+    + API_KEY;
+
+  const response = await axios.post(url, {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: 4096,
+    },
+  });
 
   return response.data.candidates[0].content.parts[0].text as string;
 }
