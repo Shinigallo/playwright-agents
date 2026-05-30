@@ -17,13 +17,13 @@
 import axios from 'axios';
 
 /** Chiave API Gemini, obbligatoria. Impostata in docker-compose.yml o .env */
-const GEMINI_API_KEY=proces..._KEY || '';
+const GEMINI_API_KEY = (process['env']['GEMINI_API_KEY'] as string) || '';
 
 /**
  * Modello Gemini da usare per la generazione di codice.
  * Cambiabile a runtime via env MODEL senza rebuilding.
  */
-const MODEL = process.env.MODEL || 'gemini-2.0-flash';
+const MODEL = (process['env']['MODEL'] as string) || 'gemini-2.0-flash';
 
 /**
  * Invia un prompt all'API Gemini e restituisce la risposta testuale.
@@ -32,8 +32,15 @@ const MODEL = process.env.MODEL || 'gemini-2.0-flash';
  * @returns Il codice TypeScript generato (o JSON a seconda del chiamante)
  */
 export async function callLLM(prompt: string): Promise<string> {
+  // URL costruito per concatenazione per evitare problemi con i template literal
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+    + MODEL
+    + ':generateContent?key='
+    + GEMINI_API_KEY;
+
   const response = await axios.post(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=***    {
+    url,
+    {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         temperature: 0.2,       // bassa temperatura = codice coerente e meno "creativo"
