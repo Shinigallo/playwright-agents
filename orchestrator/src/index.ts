@@ -29,7 +29,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // aumentato da default 100kb per gestire pageSnapshot grandi
 
 // ---------------------------------------------------------------------------
 // CORS — necessario perché il frontend (porta 8089) chiama questo servizio

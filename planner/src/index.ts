@@ -97,22 +97,28 @@ async function snapshotPage(url: string): Promise<string> {
         if (text) lines.push(`HEADING: ${text}`);
       });
 
-      // Pulsanti — fondamentali per interazioni e cookie banner
+      // Pulsanti — fondamentali per interazioni e cookie banner (max 30)
+      let btnCount = 0;
       document.querySelectorAll('button').forEach(el => {
+        if (btnCount >= 30) return;
         const text = el.textContent?.trim();
         const type = el.getAttribute('type') || 'button';
         const id = el.id ? `#${el.id}` : '';
         const cls = el.className ? `.${el.className.split(' ')[0]}` : '';
         if (text) lines.push(`BUTTON: "${text}" [type=${type}${id}${cls}]`);
+        btnCount++;
       });
 
-      // Link — per navigazione e test di routing
+      // Link — per navigazione e test di routing (max 50 per non sovraccaricare il payload)
+      let linkCount = 0;
       document.querySelectorAll('a').forEach(el => {
+        if (linkCount >= 50) return;
         const text = el.textContent?.trim();
         const href = el.getAttribute('href') || '';
         // Ignora link vuoti, ancore pure (#) e javascript:void
         if (text && href && !href.startsWith('javascript') && href !== '#') {
           lines.push(`LINK: "${text}" [href=${href}]`);
+          linkCount++;
         }
       });
 
@@ -156,7 +162,8 @@ async function snapshotPage(url: string): Promise<string> {
       return lines.join('\n');
     });
 
-    return snapshot;
+    // Tronca lo snapshot a 3000 caratteri per evitare payload 413 nelle chiamate inter-agente
+    return snapshot.length > 3000 ? snapshot.substring(0, 3000) + '\n...[snapshot truncated]' : snapshot;
   } finally {
     // Chiude sempre il browser, anche in caso di errore, per evitare leak di processi
     await browser.close();
