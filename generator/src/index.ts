@@ -94,6 +94,14 @@ Rules:
 - Use .first() when multiple elements might match
 - Use waitUntil: 'domcontentloaded' in page.goto()
 - Add reasonable timeouts (30000ms for goto, 10000ms for assertions)
+- COOKIE BANNERS: Italian sites often have banners with "ACCETTA E CONTINUA", "Accetta tutto", "Accetto", "OK", "Accetta" etc.
+  After every page.goto(), add a cookie dismissal block like this:
+  \`\`\`
+  for (const label of ['ACCETTA E CONTINUA', 'Accetta tutto', 'Accetto', 'OK', 'Accetta']) {
+    try { await page.getByRole('button', { name: label, exact: false }).first().click({ timeout: 3000 }); break; } catch {}
+  }
+  \`\`\`
+  This loop tries multiple common Italian cookie consent labels and stops at the first one found.
 - Return ONLY the TypeScript code, no explanation, no markdown fences.`);
 
     // Rimuove eventuali markdown fences dalla risposta Gemini
