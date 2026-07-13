@@ -25,22 +25,36 @@
  */
 
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 
 const app = express();
-app.use(express.json({ limit: '10mb' })); // aumentato da default 100kb per gestire pageSnapshot grandi
+app.use(express.json({ limit: '10mb' }));
 
 // ---------------------------------------------------------------------------
-// CORS — necessario perché il frontend (porta 8089) chiama questo servizio
-// direttamente dal browser (cross-origin). Tutte le origini sono accettate
-// perché il sistema è deployato su rete locale, non pubblica.
+// Rate limiting — massimo 10 richieste al minuto per IP per /run
+// (prevenzione abuso e consumo eccessivo API Gemini)
 // ---------------------------------------------------------------------------
+const runLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many run requests. Please wait before starting another test.' },
+});
+
+// CORS — solo localhost e reti locali, nessuna wildcard
+const CORS_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:3000', 'http://localhost:8089', 'http://192.168.1.*'];
+
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  // Le preflight OPTIONS devono ricevere 204 subito, senza entrare nelle route
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -85,15 +99,39 @@ interface RunStatus {
   startedAt: number;
 }
 
-/** Stato condiviso a livello di modulo — un solo run alla volta. */
-const runStatus: RunStatus = {
-  testId: '',
-  step: 'idle',
-  activeService: null,
-  attempt: 0,
-  log: [],
-  startedAt: 0,
-};
+/**
+ * Retry con backoff esponenziale.
+ * Utilizzato per le chiamate inter-servizio per resistere a riavvii temporanei.
+ *
+ * @param fn - Funzione async da eseguire
+ * @param retries - Numero massimo di retry (default 3)
+ * @param initialDelay - Delay iniziale in ms (default 1000)
+ * @returns Risultato della funzione
+ */
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  retries = 3,
+  initialDelay = 1000
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt < retries) {
+        const delay = initialDelay * Math.pow(2, attempt);
+        console.warn(`[Orchestrator] Retry attempt ${attempt + 1}/${retries} after ${delay}ms: ${err.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/** Stato condiviso — map testId → RunStatus per supportare run paralleli. */
+const activeRuns = new Map<string, RunStatus>();
+let nextIdCounter = 0;
 
 // ---------------------------------------------------------------------------
 // HEALTH CHECK — usato dal frontend e da Docker per verificare che il
@@ -101,13 +139,32 @@ const runStatus: RunStatus = {
 // ---------------------------------------------------------------------------
 app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'orchestrator' }));
 
+// Applica rate limiting alla rotta /run (10 req/minuto per IP)
+app.use('/run', runLimiter);
+
 /**
  * GET /status
- * Restituisce lo stato live del run corrente (o 'idle' se non c'è nulla in corso).
+ * Restituisce lo stato del run richiesto (o 'idle' se non c'è nulla in corso).
+ * Se nessun testId è fornito, restituisce l'ultimo run completato.
  * Il frontend fa polling su questo endpoint ogni 1.5s durante un run per aggiornare
  * la barra di progresso, il log in streaming e l'evidenziazione del servizio attivo.
  */
-app.get('/status', (_, res) => res.json(runStatus));
+app.get('/status', (req, res) => {
+  const testId = req.query.testId as string;
+  if (testId && activeRuns.has(testId)) {
+    return res.json(activeRuns.get(testId)!);
+  }
+  // Se nessun testId fornito, restituisce l'ultimo run attivo
+  const entries = Array.from(activeRuns.entries());
+  if (entries.length === 0) {
+    return res.json({
+      testId: '', step: 'idle', activeService: null, attempt: 0,
+      log: [], startedAt: 0,
+    } satisfies RunStatus);
+  }
+  const lastEntry = entries[entries.length - 1];
+  res.json(lastEntry[1]);
+});
 
 /**
  * POST /run
@@ -132,88 +189,89 @@ app.post('/run', async (req, res) => {
     return res.status(400).json({ error: 'prompt and baseUrl are required' });
   }
 
-  // Genera un ID univoco breve (8 caratteri) per tracciare questo run
+  // Validazione protocollo: solo http(s)://
+  try {
+    const parsed = new URL(baseUrl);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return res.status(400).json({ error: `Protocollo non supportato: ${parsed.protocol}. Usa http:// o https://` });
+    }
+  } catch {
+    return res.status(400).json({ error: 'baseUrl deve essere un URL valido (http:// o https://)' });
+  }
+
+  // Genera un ID univoco per tracciare questo run
   // nei log di tutti i container e come chiave per i report HTML.
   const testId = uuidv4().substring(0, 8);
   const log: string[] = [];
 
-  /**
-   * Helper per aggiungere una riga al log locale, stampare su console
-   * e aggiornare lo stato condiviso (che il frontend legge via /status).
-   */
-  const addLog = (msg: string) => {
-    log.push(msg);
-    console.log(msg);
-    runStatus.log = [...log]; // copia array per evitare reference sharing
-  };
-
-  // Resetta lo stato condiviso per il nuovo run
-  Object.assign(runStatus, {
+  // Crea entry nel map per supportare run paralleli
+  const run: RunStatus = {
     testId,
     step: 'planning',
     activeService: 'planner',
     attempt: 0,
     log: [],
-    passed: undefined,
     startedAt: Date.now(),
-  });
+  };
+  activeRuns.set(testId, run);
+
+  // Pulisce la entry dopo il completamento del run (garbage collection)
+  const cleanup = setTimeout(() => activeRuns.delete(testId), 5 * 60 * 1000);
+
+  /**
+   * Helper per aggiungere una riga al log e aggiornare lo stato nel map.
+   */
+  const addLog = (msg: string) => {
+    log.push(msg);
+    run.log = [...log]; // copia array per evitare reference sharing
+  };
 
   try {
     // -----------------------------------------------------------------------
     // STEP 1 — PLANNING
-    // Il Planner riceve il prompt in linguaggio naturale e produce un piano
-    // JSON strutturato con titolo, URL e lista di step (navigate/click/fill/assert).
     // -----------------------------------------------------------------------
     addLog(`[${testId}] Step 1/4: Planning...`);
-    runStatus.step = 'planning';
-    runStatus.activeService = 'planner';
+    run.step = 'planning';
+    run.activeService = 'planner';
 
     const planResp = await axios.post(`${PLANNER_URL}/plan`, { prompt, baseUrl, model });
     const { plan } = planResp.data;
-    addLog(`[${testId}] Plan: ${plan.title} (${plan.tests?.length ?? 0} test cases)`);
+    // Validazione JSON del piano prima di usarlo (fix #4)
+    if (!plan || typeof plan !== 'object' || !plan.title || !Array.isArray(plan.tests)) {
+      throw new Error('Piano invalido restituito dal Planner');
+    }
+    addLog(`[${testId}] Plan: ${plan.title} (${plan.tests.length} test cases)`);
 
     // -----------------------------------------------------------------------
     // STEP 2 — CODE GENERATION
-    // Il Generator riceve il piano JSON (che include il pageSnapshot del DOM reale
-    // estratto dal Planner) e genera codice TypeScript Playwright pronto per essere
-    // eseguito. baseUrl viene passato esplicitamente per garantire che il codice
-    // usi sempre l'URL corretto (vedi pitfall nel skill).
     // -----------------------------------------------------------------------
     addLog(`[${testId}] Step 2/4: Generating test code...`);
-    runStatus.step = 'generating';
-    runStatus.activeService = 'generator';
+    run.step = 'generating';
+    run.activeService = 'generator';
 
     const genResp = await axios.post(`${GENERATOR_URL}/generate`, { plan, baseUrl, model });
     let code = genResp.data.code;
 
     // -----------------------------------------------------------------------
     // STEP 3+4 — EXECUTE → HEAL LOOP
-    // Il test viene eseguito dall'Executor. Se fallisce, il Healer corregge
-    // il codice e si ritenta. Il loop si ripete MAX_HEAL_ATTEMPTS volte.
-    //
-    // Struttura del loop:
-    //   attempt 1: esegui → se passa, stop
-    //   attempt 1: se fallisce → heal → attempt 2
-    //   attempt 2: esegui → se passa, stop
-    //   ...fino a MAX_HEAL_ATTEMPTS heal totali
-    //
-    // Nota: il loop va da 1 a MAX_HEAL_ATTEMPTS+1 incluso, perché l'ultimo
-    // tentativo è un'esecuzione senza heal successivo.
     // -----------------------------------------------------------------------
     let passed = false;
     let lastError = '';
 
     for (let attempt = 1; attempt <= MAX_HEAL_ATTEMPTS + 1; attempt++) {
       addLog(`[${testId}] Step 3/4: Executing (attempt ${attempt})...`);
-      runStatus.step = 'executing';
-      runStatus.activeService = 'executor';
-      runStatus.attempt = attempt;
+      run.step = 'executing';
+      run.activeService = 'executor';
+      run.attempt = attempt;
 
-      // Aggiunge il numero di tentativo al testId per avere report separati per ogni run
-      const execResp = await axios.post(`${EXECUTOR_URL}/execute`, {
-        code,
-        testId: `${testId}-${attempt}`,
-      });
+      // Retry con backoff esponenziale sulle chiamate inter-servizio (fix #6)
+      const execResp = await retryWithBackoff(() =>
+        axios.post(`${EXECUTOR_URL}/execute`, {
+          code,
+          testId: `${testId}-${attempt}`,
+        }),
+        3, 1000
+      );
 
       if (execResp.data.passed) {
         passed = true;
@@ -228,26 +286,28 @@ app.post('/run', async (req, res) => {
       // Esegui il heal solo se non siamo all'ultimo tentativo consentito
       if (attempt <= MAX_HEAL_ATTEMPTS) {
         addLog(`[${testId}] Step 4/4: Healing (attempt ${attempt}/${MAX_HEAL_ATTEMPTS})...`);
-        runStatus.step = 'healing';
-        runStatus.activeService = 'healer';
+        run.step = 'healing';
+        run.activeService = 'healer';
 
-        // Il Healer riceve il codice fallito + il messaggio di errore + il piano originale
-        // per generare una versione corretta del test
-        const healResp = await axios.post(`${HEALER_URL}/heal`, {
-          code,
-          error: lastError,
-          plan,
-          pageSnapshot: plan.pageSnapshot, // snapshot DOM reale dalla visita del Planner
-          model,
-        });
+        const healResp = await retryWithBackoff(() =>
+          axios.post(`${HEALER_URL}/heal`, {
+            code,
+            error: lastError,
+            plan,
+            pageSnapshot: plan.pageSnapshot, // snapshot DOM reale dalla visita del Planner
+            model,
+          }),
+          3, 1000
+        );
         code = healResp.data.code; // il codice corretto diventa input del prossimo tentativo
       }
     }
 
     // Pipeline completato — aggiorna stato finale
-    runStatus.step = 'done';
-    runStatus.activeService = null;
-    runStatus.passed = passed;
+    run.step = 'done';
+    run.activeService = null;
+    run.passed = passed;
+    clearTimeout(cleanup);
 
     // Restituisce il risultato completo al client
     res.json({
@@ -262,8 +322,9 @@ app.post('/run', async (req, res) => {
   } catch (err: any) {
     // Errore imprevisto (es. servizio non raggiungibile, timeout di rete)
     console.error('[Orchestrator] Fatal error:', err.message);
-    runStatus.step = 'error';
-    runStatus.activeService = null;
+    run.step = 'error';
+    run.activeService = null;
+    clearTimeout(cleanup);
     res.status(500).json({ error: err.message, log });
   }
 });
