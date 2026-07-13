@@ -89,7 +89,8 @@ services:
     expose:
       - "3001"  # solo interno — chiamato dall'orchestrator via http://planner:3001
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}  # letto da .env nel progetto
+      # Chiavi API Gemini multiple — rotazione automatica su quota ecceduta
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}  # comma-separated list
       - MODEL=${MODEL:-gemini-2.0-flash}  # override opzionale: gemini-2.5-pro / gemini-3.0-ultra
     networks:
       - agents-net
@@ -108,7 +109,8 @@ services:
     expose:
       - "3002"  # solo interno — chiamato dall'orchestrator via http://generator:3002
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      # Chiavi API Gemini multiple — rotazione automatica su quota ecceduta
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - MODEL=${MODEL:-gemini-2.0-flash}
     networks:
       - agents-net
@@ -127,7 +129,7 @@ services:
     expose:
       - "3003"  # solo interno — chiamato dall'orchestrator via http://healer:3003
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - MODEL=${MODEL:-gemini-2.0-flash}
     networks:
       - agents-net
