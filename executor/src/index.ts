@@ -52,6 +52,11 @@ app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
   res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  // Nginx proxy passa l'X-Forwarded-Proto — usalo se disponibile
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  if (forwardedProto) {
+    res.setHeader('X-Forwarded-Proto', forwardedProto);
+  }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -200,6 +205,30 @@ app.get('/reports-list', (_, res) => {
     res.json({ reports: [] });
   }
 });
+
+/**
+ * Pulizia garbage collection per le map reportServers/reportProcs.
+ * Rimuove le entry non più referenziate da directory nei REPORTS_DIR.
+ * Chiamata periodicamente per evitare memory leak.
+ */
+function gcReportServers() {
+  try {
+    if (!fs.existsSync(REPORTS_DIR)) return;
+    const existingDirs = fs.readdirSync(REPORTS_DIR);
+    for (const [testId] of reportServers.entries()) {
+      if (!existingDirs.includes(testId)) {
+        const proc = reportProcs.get(testId);
+        if (proc) {
+          try { proc.kill('SIGTERM'); } catch { /* ignore */ }
+          reportProcs.delete(testId);
+        }
+        reportServers.delete(testId);
+        console.log(`[Executor] GC: cleaned up stale report server for ${testId}`);
+      }
+    }
+  } catch { /* ignore */ }
+}
+setInterval(gcReportServers, 5 * 60 * 1000); // ogni 5 minuti
 
 /**
  * POST /execute
