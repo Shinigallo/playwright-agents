@@ -192,7 +192,7 @@ async function callOpenAI(
           timeout: 30000,
           headers: {
             'Content-Type': 'application/json',
-            ...(key && key !== 'no-key' ? { Authorization: `Bearer ${key}` } : {}),
+            ...(key && key !== 'no-key' && key !== '' ? { Authorization: `Bearer ${key}` } : {}),
           },
         }
       );

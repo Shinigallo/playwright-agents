@@ -44,17 +44,26 @@ const runLimiter = rateLimit({
   message: { error: 'Too many run requests. Please wait before starting another test.' },
 });
 
-// CORS — solo localhost e reti locali, nessuna wildcard
-const CORS_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : ['http://localhost:3000', 'http://localhost:8089', 'http://192.168.1.*'];
+// CORS — whitelist di origini consentite (nessuna wildcard con credentials)
+const ALLOWED_ORIGINS: string[] = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o: string) => o.trim())
+  : ['http://localhost:3000', 'http://localhost:8089', 'http://localhost:80'];
+
+function isAllowedOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.some(a => origin === a);
+}
 
 app.use((req, res, next) => {
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
+  if (isAllowedOrigin(req.headers.origin)) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin!);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Credentials: true solo quando l'origine è esplicitamente autorizzata
+  if (isAllowedOrigin(req.headers.origin)) {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -131,7 +140,7 @@ async function retryWithBackoff<T>(
 
 /** Stato condiviso — map testId → RunStatus per supportare run paralleli. */
 const activeRuns = new Map<string, RunStatus>();
-let nextIdCounter = 0;
+  let nextIdCounter = 0; // Rimosso: non utilizzato, usato uuidv4 per testId
 
 // ---------------------------------------------------------------------------
 // HEALTH CHECK — usato dal frontend e da Docker per verificare che il
@@ -244,7 +253,7 @@ app.post('/run', async (req, res) => {
       planReqBody.sapType = sapType || 'auto';
       addLog(`[${testId}] SAP credentials provided — type: ${sapType || 'auto'}`);
     }
-    const planResp = await axios.post(`${PLANNER_URL}/plan`, planReqBody);
+    const planResp = await axios.post(`${PLANNER_URL}/plan`, planReqBody, { timeout: 60000 });
     const { plan } = planResp.data;
     // Validazione JSON del piano prima di usarlo (fix #4)
     if (!plan || typeof plan !== 'object' || !plan.title || !Array.isArray(plan.tests)) {
@@ -264,7 +273,7 @@ app.post('/run', async (req, res) => {
       genReqBody.sapUsername = sapUsername;
       genReqBody.sapPassword = sapPassword;
     }
-    const genResp = await axios.post(`${GENERATOR_URL}/generate`, genReqBody);
+    const genResp = await axios.post(`${GENERATOR_URL}/generate`, genReqBody, { timeout: 60000 });
     let code = genResp.data.code;
 
     // -----------------------------------------------------------------------
@@ -284,7 +293,7 @@ app.post('/run', async (req, res) => {
         axios.post(`${EXECUTOR_URL}/execute`, {
           code,
           testId: `${testId}-${attempt}`,
-        }),
+        }, { timeout: 180000 }), // 3 minuti per il test Playwright
         3, 1000
       );
 
@@ -312,7 +321,7 @@ app.post('/run', async (req, res) => {
             pageSnapshot: plan.pageSnapshot, // snapshot DOM reale dalla visita del Planner
             model: runModel,
             provider: runProvider,
-          }),
+          }, { timeout: 60000 }),
           3, 1000
         );
         code = healResp.data.code; // il codice corretto diventa input del prossimo tentativo
