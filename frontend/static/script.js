@@ -247,6 +247,9 @@ async function runTest() {
   appendLog(`Starting run — provider: ${selectedProvider}, model: ${selectedModel}`);
   appendLog(`Prompt: "${prompt}"`);
   appendLog(`Base URL: ${baseUrl}`);
+  if (document.getElementById('sapUsername')?.value) {
+    appendLog(`SAP credentials provided — user: ${document.getElementById('sapUsername').value}`);
+  }
 
   try {
     const requestBody = { prompt, baseUrl, model: selectedModel, provider: selectedProvider };
@@ -256,6 +259,14 @@ async function runTest() {
       if (openaiUrl) requestBody.openaiBaseURL = openaiUrl.value;
       if (openaiKey) requestBody.openaiApiKey = openaiKey.value;
     }
+
+    // SAP options
+    const sapUsername = document.getElementById('sapUsername');
+    const sapPassword = document.getElementById('sapPassword');
+    const sapType = document.getElementById('sapType');
+    if (sapUsername?.value) requestBody.sapUsername = sapUsername.value;
+    if (sapPassword?.value) requestBody.sapPassword = sapPassword.value;
+    if (sapType?.value) requestBody.sapType = sapType.value;
 
     const resp = await fetch(`${orchUrl}/run`, {
       method: 'POST',

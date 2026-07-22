@@ -75,6 +75,10 @@ services:
       - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-}
       - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
       - MODEL=${MODEL:-gemini-2.0-flash}
+      # SAP credentials (opzionali — fornibili anche via API request body)
+      - SAP_USERNAME=${SAP_USERNAME:-}
+      - SAP_PASSWORD=${SAP_PASSWORD:-}
+      - SAP_TYPE=${SAP_TYPE:-auto}
     depends_on:
       - planner
       - generator
@@ -103,6 +107,9 @@ services:
       - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
       - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://host.docker.internal:11434/v1}
       - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
+      - SAP_USERNAME=${SAP_USERNAME:-}
+      - SAP_PASSWORD=${SAP_PASSWORD:-}
+      - SAP_TYPE=${SAP_TYPE:-auto}
     networks:
       - agents-net
 
@@ -126,6 +133,9 @@ services:
       - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
       - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://host.docker.internal:11434/v1}
       - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
+      - SAP_USERNAME=${SAP_USERNAME:-}
+      - SAP_PASSWORD=${SAP_PASSWORD:-}
+      - SAP_TYPE=${SAP_TYPE:-auto}
     networks:
       - agents-net
 
@@ -149,6 +159,9 @@ services:
       - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
       - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://host.docker.internal:11434/v1}
       - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
+      - SAP_USERNAME=${SAP_USERNAME:-}
+      - SAP_PASSWORD=${SAP_PASSWORD:-}
+      - SAP_TYPE=${SAP_TYPE:-auto}
     networks:
       - agents-net
 

@@ -45,15 +45,28 @@ app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'generator' }));
  * Il codice contiene un test.describe() con N test() block,
  * uno per ogni test case nel piano.
  */
+/**
+ * Rileva se il piano richiede locators SAP
+ */
+function isSAPPlan(plan: any): boolean {
+  if (!plan) return false;
+  const planStr = JSON.stringify(plan).toLowerCase();
+  return /sap|fiori|s4|ui5|webgui/.test(planStr);
+}
+
 app.post('/generate', async (req, res) => {
-  const { plan, baseUrl: explicitBaseUrl, model, openaiBaseURL, openaiApiKey } = req.body;
+  const { plan, baseUrl: explicitBaseUrl, model, openaiBaseURL, openaiApiKey, sapUsername, sapPassword } = req.body;
   if (!plan) return res.status(400).json({ error: 'plan is required' });
 
   // L'URL esplicito ha priorità su quello nel piano per sicurezza
   const targetBaseUrl = explicitBaseUrl || plan.baseUrl || '';
+  const isSAP = isSAPPlan(plan) || !!(sapUsername && sapPassword);
 
   try {
     console.log(`[Generator] Generating suite for: "${plan.title}" (${plan.tests?.length ?? 0} tests)`);
+    if (isSAP) {
+      console.log(`[Generator] SAP mode — using playwright-sap locators`);
+    }
 
     // Il pageSnapshot contiene gli elementi DOM reali estratti dal Planner visitando la pagina.
     // Lo passiamo al LLM così può generare selettori basati sul testo reale degli elementi,
@@ -61,6 +74,18 @@ app.post('/generate', async (req, res) => {
     const snapshotContext = plan.pageSnapshot
       ? `\nACTUAL PAGE ELEMENTS (extracted via Playwright DOM inspection):\n--- PAGE SNAPSHOT ---\n${plan.pageSnapshot}\n--- END SNAPSHOT ---\nUse the real text from this snapshot for selectors — do NOT invent CSS classes or IDs.\nIf you see a COOKIE_BANNER entry, add a cookie dismissal try/catch after every page.goto().\n`
       : '';
+
+    const sapCredentials = (sapUsername && sapPassword) ? `\n- Login: await page.SAPLogin('${sapUsername}', '${sapPassword}', targetBaseUrl);` : '';
+
+    const sapInstructions = isSAP ? `\n\n[SAP REQUIREMENTS]
+- Import: import '@playwright-sap/extra';
+- Use getByRoleUI5('ControlType', { property: 'value' }) for UI5 controls
+- Use locateSID('SID') for WebGUI screen elements
+- Use locateUI5('//ControlClass[index]') for UI5 control paths
+- Supported control types: Button, Input, Table, Dialog, IconTabFilter, Tile, ComboBox, Item, List
+- For login:${sapCredentials}
+- Add longer timeouts for SAP (30000ms for goto, 15000ms for assertions)
+- SAP pages may take time to load — use page.waitForLoadState('networkidle') after goto` : '';
 
     let code = await callLLM(
       `[ROLE] You are a Playwright test code generator. [END ROLE]
@@ -80,6 +105,7 @@ ${plan.pageSnapshot}
 --- END SNAPSHOT ---
 Use the real text from this snapshot for selectors — do NOT invent CSS classes or IDs.
 If you see a COOKIE_BANNER entry, add a cookie dismissal try/catch after every page.goto().` : ''}
+${sapInstructions}
 
 [INSTRUCTION] REQUIRED STRUCTURE — use exactly this pattern:
 \`\`\`

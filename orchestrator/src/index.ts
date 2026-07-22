@@ -182,7 +182,7 @@ app.get('/status', (req, res) => {
  * Per feedback in tempo reale usare GET /status in parallelo.
  */
 app.post('/run', async (req, res) => {
-  const { prompt, baseUrl, model, provider } = req.body;
+  const { prompt, baseUrl, model, provider, sapUsername, sapPassword, sapType } = req.body;
 
   // Validazione input — entrambi i campi sono obbligatori
   if (!prompt || !baseUrl) {
@@ -205,6 +205,7 @@ app.post('/run', async (req, res) => {
   const log: string[] = [];
   const runProvider = provider || process.env.LLM_PROVIDER || 'gemini';
   const runModel = model || process.env.MODEL || 'gemini-2.0-flash';
+  const hasSAP = !!(sapUsername && sapPassword);
 
   // Crea entry nel map per supportare run paralleli
   const run: RunStatus = {
@@ -236,7 +237,14 @@ app.post('/run', async (req, res) => {
     run.step = 'planning';
     run.activeService = 'planner';
 
-    const planResp = await axios.post(`${PLANNER_URL}/plan`, { prompt, baseUrl, model: runModel, provider: runProvider });
+    const planReqBody: any = { prompt, baseUrl, model: runModel, provider: runProvider };
+    if (hasSAP) {
+      planReqBody.sapUsername = sapUsername;
+      planReqBody.sapPassword = sapPassword;
+      planReqBody.sapType = sapType || 'auto';
+      addLog(`[${testId}] SAP credentials provided — type: ${sapType || 'auto'}`);
+    }
+    const planResp = await axios.post(`${PLANNER_URL}/plan`, planReqBody);
     const { plan } = planResp.data;
     // Validazione JSON del piano prima di usarlo (fix #4)
     if (!plan || typeof plan !== 'object' || !plan.title || !Array.isArray(plan.tests)) {
@@ -251,7 +259,12 @@ app.post('/run', async (req, res) => {
     run.step = 'generating';
     run.activeService = 'generator';
 
-    const genResp = await axios.post(`${GENERATOR_URL}/generate`, { plan, baseUrl, model: runModel, provider: runProvider });
+    const genReqBody: any = { plan, baseUrl, model: runModel, provider: runProvider };
+    if (hasSAP) {
+      genReqBody.sapUsername = sapUsername;
+      genReqBody.sapPassword = sapPassword;
+    }
+    const genResp = await axios.post(`${GENERATOR_URL}/generate`, genReqBody);
     let code = genResp.data.code;
 
     // -----------------------------------------------------------------------

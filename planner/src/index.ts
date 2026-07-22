@@ -40,6 +40,24 @@ import express from 'express';
 import { chromium } from '@playwright/test';
 import { callLLM } from './llm';
 
+/**
+ * Rileva se il target è un'applicazione SAP/Fiori
+ * Basato su patterns comuni nei URL SAP
+ */
+function detectSAP(url: string, prompt: string): boolean {
+  const sapPatterns = [
+    /\.sap\./i,
+    /fiori/i,
+    /s4(hana)?/i,
+    /webgui/i,
+    /ui5/i,
+    /sap\.example/i,
+  ];
+
+  const combined = `${url} ${prompt}`.toLowerCase();
+  return sapPatterns.some(pattern => pattern.test(combined));
+}
+
 const app = express();
 app.use(express.json());
 
@@ -182,8 +200,10 @@ async function snapshotPage(url: string): Promise<string> {
  * Risposta: { success: true, plan: TestSuitePlan }
  */
 app.post('/plan', async (req, res) => {
-  const { prompt, baseUrl, model, openaiBaseURL, openaiApiKey } = req.body;
+  const { prompt, baseUrl, model, openaiBaseURL, openaiApiKey, sapUsername, sapPassword, sapType } = req.body;
   if (!prompt || !baseUrl) return res.status(400).json({ error: 'prompt and baseUrl are required' });
+
+  const isSAP = detectSAP(baseUrl, prompt) || !!(sapUsername && sapPassword);
 
   try {
     // Step 1: visita la pagina e ottieni il DOM snapshot reale
@@ -201,6 +221,23 @@ app.post('/plan', async (req, res) => {
 
     // Step 2: passa snapshot + prompt all'LLM per generare il piano
     console.log(`[Planner] Analyzing: "${prompt}"`);
+    if (isSAP) {
+      console.log(`[Planner] SAP detected — using SAP-specific locators`);
+    }
+
+    const sapCredentials = (sapUsername && sapPassword) ? `\n\n[SAP CREDENTIALS]
+- Username: ${sapUsername}
+- Password: ${sapPassword ? '••••••••' : 'not provided'}
+- SAP Type: ${sapType || 'auto'}
+- Use page.SAPLogin('${sapUsername}', '${sapPassword}', baseUrl) at start of each test` : '';
+
+    const sapInstructions = isSAP ? `\n\n[SAP MODE] Target is SAP/Fiori. Use Playwright-SAP locators:${sapCredentials}
+- Use getByRoleUI5('ControlType', { property: 'value' }) instead of standard Playwright locators
+- Use locateSID('SID') for WebGUI screen elements
+- Use locateUI5('//ControlClass[index]') for UI5 control paths
+- Supported control types: Button, Input, Table, Dialog, IconTabFilter, Tile, ComboBox, Item, List
+- Do NOT use standard getByRole/getByText for SAP elements — use SAP-specific locators
+- SAP pages may have long loading times — add appropriate waits` : '';
 
     const raw = await callLLM(
       `[ROLE] You are a Playwright test planning agent. [END ROLE]
@@ -216,7 +253,7 @@ ${prompt}
 --- PAGE SNAPSHOT ---
 ${pageSnapshot}
 --- END SNAPSHOT ---
-
+${sapInstructions}
 [INSTRUCTION] Based on the REAL elements above, create a complete test SUITE plan as JSON.
 Use the actual text of buttons, links and inputs from the snapshot — do NOT invent selectors.
 If you see a COOKIE_BANNER or a button with text like "Accept", "Accetta", "OK", include a

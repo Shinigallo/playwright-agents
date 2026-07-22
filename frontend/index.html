@@ -421,7 +421,7 @@
     <line x1="4" y1="14" x2="8" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
     <line x1="20" y1="14" x2="24" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
   </svg>
-  <h1>Playwright Agents <span>v2.4</span></h1>
+  <h1>Playwright Agents <span>v2.5 SAP</span></h1>
   <div class="health-bar" id="healthBar">
     <div class="pill" id="pill-orchestrator"><span class="dot"></span>orchestrator</div>
     <div class="pill" id="pill-planner"><span class="dot"></span>planner</div>
@@ -501,6 +501,28 @@
           <input id="openaiApiKey" type="password" value="" placeholder="no-key-needed (per Ollama)" />
         </div>
       </div>
+
+      <details class="field" id="sapSection">
+        <summary style="cursor:pointer;color:var(--text2);font-size:.8rem;user-select:none">🏢 SAP Options (opzionale)</summary>
+        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">SAP Username</label>
+            <input id="sapUsername" type="text" placeholder="USER01" />
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">SAP Password</label>
+            <input id="sapPassword" type="password" placeholder="••••••••" />
+          </div>
+          <div>
+            <label style="font-size:.72rem;color:var(--text2)">SAP Type</label>
+            <select id="sapType">
+              <option value="auto">Auto-detect</option>
+              <option value="fiori">Fiori Launchpad</option>
+              <option value="webgui">SAP WebGUI</option>
+            </select>
+          </div>
+        </div>
+      </details>
 
       <button class="run-btn" id="runBtn" onclick="runTest()">
         <div class="spinner"></div>
