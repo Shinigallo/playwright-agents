@@ -55,7 +55,7 @@ function isSAPPlan(plan: any): boolean {
 }
 
 app.post('/generate', async (req, res) => {
-  const { plan, baseUrl: explicitBaseUrl, model, openaiBaseURL, openaiApiKey, sapUsername, sapPassword } = req.body;
+  const { plan, baseUrl: explicitBaseUrl, model, provider, openaiBaseURL, openaiApiKey, sapUsername, sapPassword } = req.body;
   if (!plan) return res.status(400).json({ error: 'plan is required' });
 
   // L'URL esplicito ha priorità su quello nel piano per sicurezza
@@ -78,12 +78,14 @@ app.post('/generate', async (req, res) => {
     const sapCredentials = (sapUsername && sapPassword) ? `\n- Login: await page.SAPLogin('${sapUsername}', '${sapPassword}', targetBaseUrl);` : '';
 
     const sapInstructions = isSAP ? `\n\n[SAP REQUIREMENTS]
-- Import: import '@playwright-sap/extra';
-- Use getByRoleUI5('ControlType', { property: 'value' }) for UI5 controls
-- Use locateSID('SID') for WebGUI screen elements
-- Use locateUI5('//ControlClass[index]') for UI5 control paths
+- Keep the standard import: import { test, expect } from '@playwright/test';
+  (playwright-sap is installed as an alias, so the SAP methods below are already
+   available on the \`page\` object — do NOT add any other import.)
+- Use page.getByRoleUI5('ControlType', { property: 'value' }) for UI5 controls
+- Use page.locateSID('SID') for WebGUI screen elements
+- Use page.locateUI5('//ControlClass[index]') for UI5 control paths (1-based index)
 - Supported control types: Button, Input, Table, Dialog, IconTabFilter, Tile, ComboBox, Item, List
-- For login:${sapCredentials}
+- For login:${sapCredentials || " use page.SAPLogin(username, password, baseUrl) if credentials are known"}
 - Add longer timeouts for SAP (30000ms for goto, 15000ms for assertions)
 - SAP pages may take time to load — use page.waitForLoadState('networkidle') after goto` : '';
 
@@ -139,7 +141,7 @@ Rules:
   This loop tries multiple common Italian cookie consent labels and stops at the first one found.
 - Return ONLY the TypeScript code, no explanation, no markdown fences.`,
       model,
-      { openaiBaseURL, openaiApiKey }
+      { provider, openaiBaseURL, openaiAPIKey: openaiApiKey }
     );
 
     // Rimuove eventuali markdown fences dalla risposta Gemini
