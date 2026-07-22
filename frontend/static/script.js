@@ -10,6 +10,7 @@ const SERVICE_INPUTS = {
 };
 
 let selectedModel = 'gemini-2.0-flash';
+let selectedProvider = 'gemini';
 let history = [];
 let currentResult = null;
 
@@ -19,8 +20,60 @@ document.querySelectorAll('.model-btn').forEach(btn => {
     document.querySelectorAll('.model-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     selectedModel = btn.dataset.model;
+    if (btn.dataset.provider) selectedProvider = btn.dataset.provider;
   });
 });
+
+// ── Provider selector ──
+const providerBtns = document.querySelectorAll('.provider-btn');
+providerBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    providerBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedProvider = btn.dataset.provider;
+    updateModelOptions();
+  });
+});
+
+function updateModelOptions() {
+  const container = document.getElementById('modelButtons');
+  const urlField = document.getElementById('openaiUrlField');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (selectedProvider === 'openai') {
+    urlField.style.display = 'block';
+  } else {
+    urlField.style.display = 'none';
+  }
+
+  const models = selectedProvider === 'gemini'
+    ? [
+        { model: 'gemini-2.0-flash', label: '2.0 Flash', provider: 'gemini' },
+        { model: 'gemini-2.5-pro', label: '2.5 Pro', provider: 'gemini' },
+        { model: 'gemini-3.0-ultra', label: '3.0 Ultra', provider: 'gemini' },
+      ]
+    : [
+        { model: 'llama3.1', label: 'Llama 3.1', provider: 'openai' },
+        { model: 'codellama', label: 'CodeLlama', provider: 'openai' },
+        { model: 'mixtral', label: 'Mixtral', provider: 'openai' },
+      ];
+
+  models.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'model-btn' + (m.model === selectedModel ? ' active' : '');
+    btn.dataset.model = m.model;
+    btn.dataset.provider = m.provider;
+    btn.textContent = m.label;
+    container.appendChild(btn);
+  });
+
+  if (selectedProvider === 'openai' && selectedModel === 'gemini-2.0-flash') {
+    selectedModel = 'llama3.1';
+  } else if (selectedProvider === 'gemini' && selectedModel === 'llama3.1') {
+    selectedModel = 'gemini-2.0-flash';
+  }
+}
 
 // ── Tabs ──
 document.querySelectorAll('.tab').forEach(tab => {
@@ -191,15 +244,23 @@ async function runTest() {
   document.querySelector('[data-tab="pipeline"]').classList.add('active');
   document.getElementById('tab-pipeline').classList.add('active');
 
-  appendLog(`Starting run — model: ${selectedModel}`);
+  appendLog(`Starting run — provider: ${selectedProvider}, model: ${selectedModel}`);
   appendLog(`Prompt: "${prompt}"`);
   appendLog(`Base URL: ${baseUrl}`);
 
   try {
+    const requestBody = { prompt, baseUrl, model: selectedModel, provider: selectedProvider };
+    if (selectedProvider === 'openai') {
+      const openaiUrl = document.getElementById('openaiBaseUrl');
+      const openaiKey = document.getElementById('openaiApiKey');
+      if (openaiUrl) requestBody.openaiBaseURL = openaiUrl.value;
+      if (openaiKey) requestBody.openaiApiKey = openaiKey.value;
+    }
+
     const resp = await fetch(`${orchUrl}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, baseUrl, model: selectedModel })
+      body: JSON.stringify(requestBody)
     });
 
     const result = await resp.json();

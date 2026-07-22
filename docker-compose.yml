@@ -67,6 +67,14 @@ services:
       - EXECUTOR_URL=http://executor:3004
       # Numero massimo di tentativi di auto-healing prima di arrendersi
       - MAX_HEAL_ATTEMPTS=3
+      # Provider LLM: "gemini" (default) o "openai" (Ollama, LM Studio, OpenAI, opencode, etc.)
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      # Pass-through delle chiavi API al planner (per rotazione)
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
+      - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-}
+      - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
+      - MODEL=${MODEL:-gemini-2.0-flash}
     depends_on:
       - planner
       - generator
@@ -89,14 +97,17 @@ services:
     expose:
       - "3001"  # solo interno — chiamato dall'orchestrator via http://planner:3001
     environment:
-      # Chiavi API Gemini multiple — rotazione automatica su quota ecceduta
-      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}  # comma-separated list
-      - MODEL=${MODEL:-gemini-2.0-flash}  # override opzionale: gemini-2.5-pro / gemini-3.0-ultra
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
+      - MODEL=${MODEL:-gemini-2.0-flash}
+      - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://host.docker.internal:11434/v1}
+      - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
     networks:
       - agents-net
 
   # ─────────────────────────────────────────────────────────
-  # GENERATOR — Agente di generazione codice (LLM: Gemini)
+  # GENERATOR — Agente di generazione codice
   # ─────────────────────────────────────────────────────────
   # Riceve il piano JSON e genera codice TypeScript Playwright
   # completo e pronto per l'esecuzione.
@@ -109,14 +120,17 @@ services:
     expose:
       - "3002"  # solo interno — chiamato dall'orchestrator via http://generator:3002
     environment:
-      # Chiavi API Gemini multiple — rotazione automatica su quota ecceduta
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - MODEL=${MODEL:-gemini-2.0-flash}
+      - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://host.docker.internal:11434/v1}
+      - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
     networks:
       - agents-net
 
   # ─────────────────────────────────────────────────────────
-  # HEALER — Agente di auto-correzione (LLM: Gemini)
+  # HEALER — Agente di auto-correzione
   # ─────────────────────────────────────────────────────────
   # Interviene solo se il test fallisce. Analizza il codice
   # fallito + l'errore di Playwright e genera una versione corretta.
@@ -129,8 +143,12 @@ services:
     expose:
       - "3003"  # solo interno — chiamato dall'orchestrator via http://healer:3003
     environment:
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
       - GEMINI_API_KEYS=${GEMINI_API_KEYS:-}
       - MODEL=${MODEL:-gemini-2.0-flash}
+      - OPENAI_API_KEYS=${OPENAI_API_KEYS:-}
+      - OPENAI_API_BASE_URL=${OPENAI_API_BASE_URL:-http://host.docker.internal:11434/v1}
+      - OPENAI_API_MODEL=${OPENAI_API_MODEL:-llama3.1}
     networks:
       - agents-net
 

@@ -67,7 +67,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'healer' }));
  *   { success: true, code: string } — codice corretto pronto per un nuovo tentativo
  */
 app.post('/heal', async (req, res) => {
-  const { code, error, plan, pageSnapshot } = req.body;
+  const { code, error, plan, pageSnapshot, model, openaiBaseURL, openaiApiKey } = req.body;
 
   if (!code || !error) {
     return res.status(400).json({ error: 'code and error are required' });
@@ -145,7 +145,7 @@ If you see a COOKIE_BANNER entry, make sure the dismissal try/catch is present a
       'Return ONLY the fixed TypeScript code, no explanation, no markdown fences.',
     ].join('\n');
 
-    let fixedCode = await callLLM(prompt);
+    let fixedCode = await callLLM(prompt, model, { openaiBaseURL, openaiApiKey });
 
     // Rimozione delle eventuali markdown fences dalla risposta del modello
     fixedCode = fixedCode

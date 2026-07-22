@@ -154,6 +154,27 @@
       color: #fff;
     }
 
+    .provider-select { display: flex; gap: 6px; }
+    .provider-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text2);
+      font-size: .8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .provider-btn.active {
+      background: var(--accent2);
+      border-color: var(--accent2);
+      color: #fff;
+    }
+    .provider-btn:hover { border-color: var(--accent2); }
+
+    .custom-url-field { margin-top: 10px; }
+
     .run-btn {
       width: 100%;
       padding: 12px;
@@ -400,7 +421,7 @@
     <line x1="4" y1="14" x2="8" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
     <line x1="20" y1="14" x2="24" y2="14" stroke="white" stroke-width="2" stroke-linecap="round"/>
   </svg>
-  <h1>Playwright Agents <span>v2.3</span></h1>
+  <h1>Playwright Agents <span>v2.4</span></h1>
   <div class="health-bar" id="healthBar">
     <div class="pill" id="pill-orchestrator"><span class="dot"></span>orchestrator</div>
     <div class="pill" id="pill-planner"><span class="dot"></span>planner</div>
@@ -454,11 +475,30 @@
       </details>
 
       <div class="field">
+        <label>LLM Provider</label>
+        <div class="provider-select">
+          <button class="provider-btn active" data-provider="gemini">Gemini</button>
+          <button class="provider-btn" data-provider="openai">OpenAI Compatible</button>
+        </div>
+      </div>
+
+      <div class="field">
         <label>Model</label>
-        <div class="model-select">
-          <button class="model-btn active" data-model="gemini-2.0-flash">2.0 Flash</button>
-          <button class="model-btn" data-model="gemini-2.5-pro">2.5 Pro</button>
-          <button class="model-btn" data-model="gemini-3.0-ultra">3.0 Ultra</button>
+        <div class="model-select" id="modelButtons">
+          <button class="model-btn active" data-model="gemini-2.0-flash" data-provider="gemini">2.0 Flash</button>
+          <button class="model-btn" data-model="gemini-2.5-pro" data-provider="gemini">2.5 Pro</button>
+          <button class="model-btn" data-model="gemini-3.0-ultra" data-provider="gemini">3.0 Ultra</button>
+        </div>
+      </div>
+
+      <div class="custom-url-field" id="openaiUrlField" style="display:none">
+        <div class="field">
+          <label style="font-size:.72rem;color:var(--text2)">OpenAI API Base URL</label>
+          <input id="openaiBaseUrl" type="url" value="http://host.docker.internal:11434/v1" placeholder="http://host.docker.internal:11434/v1" />
+        </div>
+        <div class="field">
+          <label style="font-size:.72rem;color:var(--text2)">OpenAI API Key (opzionale)</label>
+          <input id="openaiApiKey" type="password" value="" placeholder="no-key-needed (per Ollama)" />
         </div>
       </div>
 

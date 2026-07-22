@@ -1,35 +1,28 @@
 /**
  * ============================================================
- * LLM Helper — Wrapper per le chiamate all'API Gemini via Proxy
+ * LLM Helper — Wrapper per le chiamate LLM via Proxy
  * ============================================================
- * Questo modulo centralizza tutta la logica di comunicazione
- * con l'API Google Gemini. Ogni microservizio (Planner, Generator,
- * Healer) usa questo wrapper per passare le chiamate al proxy
- * che gestisce:
+ * Wrapper per healer: supporta Gemini e API OpenAI-compatible
+ * (Ollama, LM Studio, OpenAI, opencode, Azure, etc.)
+ *
+ * Il provider e il modello vengono passati dal caller (orchestrator)
+ * e trasmessi al proxy centrale che gestisce:
  *   - Sicurezza chiave API (non esposta ai servizi)
  *   - Rate limiting e retry
  *   - Logging centralizzato
- *
- * Modello selezionabile via variabile d'ambiente MODEL:
- *   - gemini-2.0-flash  (default — veloce e poco costoso)
- *   - gemini-2.5-pro    (più potente, più lento)
- *   - gemini-3.0-ultra  (massima capacità)
- *
- * Parametri di generazione:
- *   - temperature: 0.2 — output deterministico, ideale per codice
- *   - maxOutputTokens: 4096 — sufficiente per test Playwright completi
  * ============================================================
  */
 
-import { callLLM } from '../../shared/gemini-proxy';
+import { callLLM as callLLMProxy } from '../../shared/gemini-proxy';
 
 /**
- * Invia un prompt all'API Gemini via proxy e restituisce la risposta testuale.
+ * Invia un prompt al LLM via proxy e restituisce la risposta testuale.
  *
  * @param prompt - Il testo del prompt da inviare al modello
+ * @param model - Modello da usare (opzionale, usa default dal proxy)
  * @returns La risposta testuale del modello
  * @throws Errore proxy se la chiamata fallisce
  */
-export async function callLLM(prompt: string): Promise<string> {
-  return callLLM(prompt, 'healer');
+export async function callLLM(prompt: string, model?: string): Promise<string> {
+  return callLLMProxy(prompt, 'healer', model);
 }

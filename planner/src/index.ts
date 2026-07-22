@@ -177,12 +177,12 @@ async function snapshotPage(url: string): Promise<string> {
  * POST /plan
  * Visita la pagina reale, estrae gli elementi DOM e genera un piano di suite.
  *
- * Body: { prompt: string, baseUrl: string, model?: string }
+ * Body: { prompt: string, baseUrl: string, model?: string, provider?: string, openaiBaseURL?: string, openaiApiKey?: string }
  *
  * Risposta: { success: true, plan: TestSuitePlan }
  */
 app.post('/plan', async (req, res) => {
-  const { prompt, baseUrl } = req.body;
+  const { prompt, baseUrl, model, openaiBaseURL, openaiApiKey } = req.body;
   if (!prompt || !baseUrl) return res.status(400).json({ error: 'prompt and baseUrl are required' });
 
   try {
@@ -202,7 +202,8 @@ app.post('/plan', async (req, res) => {
     // Step 2: passa snapshot + prompt all'LLM per generare il piano
     console.log(`[Planner] Analyzing: "${prompt}"`);
 
-    const raw = await callLLM(`[ROLE] You are a Playwright test planning agent. [END ROLE]
+    const raw = await callLLM(
+      `[ROLE] You are a Playwright test planning agent. [END ROLE]
 [CONTEXT] Target page: ${baseUrl} [END CONTEXT]
 
 [USER REQUEST]
@@ -249,6 +250,9 @@ Rules:
 - Test names must start with "should" and be descriptive
 - Base selectors on actual text from the snapshot, not invented CSS classes
 - Return ONLY valid JSON, no explanation, no markdown fences.`,
+      model,
+      { openaiBaseURL, openaiApiKey }
+    );
 
     const plan = JSON.parse(
       raw

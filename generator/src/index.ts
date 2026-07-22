@@ -46,7 +46,7 @@ app.get('/health', (_, res) => res.json({ status: 'ok', agent: 'generator' }));
  * uno per ogni test case nel piano.
  */
 app.post('/generate', async (req, res) => {
-  const { plan, baseUrl: explicitBaseUrl } = req.body;
+  const { plan, baseUrl: explicitBaseUrl, model, openaiBaseURL, openaiApiKey } = req.body;
   if (!plan) return res.status(400).json({ error: 'plan is required' });
 
   // L'URL esplicito ha priorità su quello nel piano per sicurezza
@@ -62,7 +62,8 @@ app.post('/generate', async (req, res) => {
       ? `\nACTUAL PAGE ELEMENTS (extracted via Playwright DOM inspection):\n--- PAGE SNAPSHOT ---\n${plan.pageSnapshot}\n--- END SNAPSHOT ---\nUse the real text from this snapshot for selectors — do NOT invent CSS classes or IDs.\nIf you see a COOKIE_BANNER entry, add a cookie dismissal try/catch after every page.goto().\n`
       : '';
 
-    let code = await callLLM(`[ROLE] You are a Playwright test code generator. [END ROLE]
+    let code = await callLLM(
+      `[ROLE] You are a Playwright test code generator. [END ROLE]
 
 [CONTEXT] Base URL: "${targetBaseUrl}" — ALWAYS use this URL in page.goto(), never invent or change it [END CONTEXT]
 
@@ -110,7 +111,10 @@ Rules:
   }
   \`\`\`
   This loop tries multiple common Italian cookie consent labels and stops at the first one found.
-- Return ONLY the TypeScript code, no explanation, no markdown fences.`);
+- Return ONLY the TypeScript code, no explanation, no markdown fences.`,
+      model,
+      { openaiBaseURL, openaiApiKey }
+    );
 
     // Rimuove eventuali markdown fences dalla risposta Gemini
     code = code

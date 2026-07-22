@@ -182,7 +182,7 @@ app.get('/status', (req, res) => {
  * Per feedback in tempo reale usare GET /status in parallelo.
  */
 app.post('/run', async (req, res) => {
-  const { prompt, baseUrl, model } = req.body;
+  const { prompt, baseUrl, model, provider } = req.body;
 
   // Validazione input — entrambi i campi sono obbligatori
   if (!prompt || !baseUrl) {
@@ -203,6 +203,8 @@ app.post('/run', async (req, res) => {
   // nei log di tutti i container e come chiave per i report HTML.
   const testId = uuidv4().substring(0, 8);
   const log: string[] = [];
+  const runProvider = provider || process.env.LLM_PROVIDER || 'gemini';
+  const runModel = model || process.env.MODEL || 'gemini-2.0-flash';
 
   // Crea entry nel map per supportare run paralleli
   const run: RunStatus = {
@@ -230,11 +232,11 @@ app.post('/run', async (req, res) => {
     // -----------------------------------------------------------------------
     // STEP 1 — PLANNING
     // -----------------------------------------------------------------------
-    addLog(`[${testId}] Step 1/4: Planning...`);
+    addLog(`[${testId}] Step 1/4: Planning... (provider: ${runProvider}, model: ${runModel})`);
     run.step = 'planning';
     run.activeService = 'planner';
 
-    const planResp = await axios.post(`${PLANNER_URL}/plan`, { prompt, baseUrl, model });
+    const planResp = await axios.post(`${PLANNER_URL}/plan`, { prompt, baseUrl, model: runModel, provider: runProvider });
     const { plan } = planResp.data;
     // Validazione JSON del piano prima di usarlo (fix #4)
     if (!plan || typeof plan !== 'object' || !plan.title || !Array.isArray(plan.tests)) {
@@ -249,7 +251,7 @@ app.post('/run', async (req, res) => {
     run.step = 'generating';
     run.activeService = 'generator';
 
-    const genResp = await axios.post(`${GENERATOR_URL}/generate`, { plan, baseUrl, model });
+    const genResp = await axios.post(`${GENERATOR_URL}/generate`, { plan, baseUrl, model: runModel, provider: runProvider });
     let code = genResp.data.code;
 
     // -----------------------------------------------------------------------
@@ -295,7 +297,8 @@ app.post('/run', async (req, res) => {
             error: lastError,
             plan,
             pageSnapshot: plan.pageSnapshot, // snapshot DOM reale dalla visita del Planner
-            model,
+            model: runModel,
+            provider: runProvider,
           }),
           3, 1000
         );
