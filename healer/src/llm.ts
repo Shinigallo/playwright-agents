@@ -13,16 +13,17 @@
  * ============================================================
  */
 
-import { callLLM as callLLMProxy } from '../../shared/gemini-proxy';
+import { callLLM as callLLMProxy, CallLLMOptions } from '../../services/shared/gemini-proxy';
 
 /**
  * Invia un prompt al LLM via proxy e restituisce la risposta testuale.
  *
  * @param prompt - Il testo del prompt da inviare al modello
  * @param model - Modello da usare (opzionale, usa default dal proxy)
+ * @param options - Provider e override OpenAI per-request (provider, openaiBaseURL, openaiAPIKey)
  * @returns La risposta testuale del modello
  * @throws Errore proxy se la chiamata fallisce
  */
-export async function callLLM(prompt: string, model?: string): Promise<string> {
-  return callLLMProxy(prompt, 'healer', model);
+export async function callLLM(prompt: string, model?: string, options?: CallLLMOptions): Promise<string> {
+  return callLLMProxy(prompt, 'healer', model, undefined, options);
 }

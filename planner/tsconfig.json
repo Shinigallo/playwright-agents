@@ -5,6 +5,10 @@
     "strict": true,
     "esModuleInterop": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*", "../services/shared/**/*.ts"],
+  "ts-node": {
+    "transpileOnly": true
   }
 }

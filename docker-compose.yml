@@ -93,7 +93,9 @@ services:
   # Riceve il prompt in linguaggio naturale e produce un piano
   # di test strutturato in JSON con titolo, URL e lista di step.
   planner:
-    build: ./planner
+    build:
+      context: .                 # repo root: serve per includere ./services/shared
+      dockerfile: planner/Dockerfile
     restart: unless-stopped
     dns:
       - 8.8.8.8
@@ -119,7 +121,9 @@ services:
   # Riceve il piano JSON e genera codice TypeScript Playwright
   # completo e pronto per l'esecuzione.
   generator:
-    build: ./generator
+    build:
+      context: .                 # repo root: serve per includere ./services/shared
+      dockerfile: generator/Dockerfile
     restart: unless-stopped
     dns:
       - 8.8.8.8
@@ -145,7 +149,9 @@ services:
   # Interviene solo se il test fallisce. Analizza il codice
   # fallito + l'errore di Playwright e genera una versione corretta.
   healer:
-    build: ./healer
+    build:
+      context: .                 # repo root: serve per includere ./services/shared
+      dockerfile: healer/Dockerfile
     restart: unless-stopped
     dns:
       - 8.8.8.8

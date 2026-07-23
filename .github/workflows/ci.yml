@@ -12,7 +12,24 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [planner, generator, healer, executor, orchestrator]
+        # planner/generator/healer usano context=. per includere ./services/shared;
+        # executor/orchestrator restano con context per-servizio.
+        include:
+          - service: planner
+            context: .
+            file: planner/Dockerfile
+          - service: generator
+            context: .
+            file: generator/Dockerfile
+          - service: healer
+            context: .
+            file: healer/Dockerfile
+          - service: executor
+            context: ./executor
+            file: executor/Dockerfile
+          - service: orchestrator
+            context: ./orchestrator
+            file: orchestrator/Dockerfile
       fail-fast: false
 
     steps:
@@ -25,7 +42,8 @@ jobs:
       - name: Build ${{ matrix.service }}
         uses: docker/build-push-action@v5
         with:
-          context: ./${{ matrix.service }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: false
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service }}
@@ -46,11 +64,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: ${{ matrix.service }}/package.json
+
+      - name: Install shared deps (LLM services)
+        # planner/generator/healer importano ../../services/shared/gemini-proxy (ha il suo package.json)
+        if: contains(fromJSON('["planner","generator","healer"]'), matrix.service)
+        run: npm install --omit=dev
+        working-directory: services/shared
 
       - name: Install deps
-        run: npm ci
+        run: npm install
         working-directory: ${{ matrix.service }}
 
       - name: Typecheck

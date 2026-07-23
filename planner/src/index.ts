@@ -208,7 +208,7 @@ async function snapshotPage(url: string): Promise<string> {
  * Risposta: { success: true, plan: TestSuitePlan }
  */
 app.post('/plan', async (req, res) => {
-  const { prompt, baseUrl, model, openaiBaseURL, openaiApiKey, sapUsername, sapPassword, sapType } = req.body;
+  const { prompt, baseUrl, model, provider, openaiBaseURL, openaiApiKey, sapUsername, sapPassword, sapType } = req.body;
   if (!prompt || !baseUrl) return res.status(400).json({ error: 'prompt and baseUrl are required' });
 
   const isSAP = detectSAP(baseUrl, prompt) || !!(sapUsername && sapPassword);
@@ -296,7 +296,7 @@ Rules:
 - Base selectors on actual text from the snapshot, not invented CSS classes
 - Return ONLY valid JSON, no explanation, no markdown fences.`,
       model,
-      { openaiBaseURL, openaiApiKey }
+      { provider, openaiBaseURL, openaiAPIKey: openaiApiKey }
     );
 
     const plan = JSON.parse(

@@ -14,7 +14,7 @@
  *   - Logging centralizzato per debug
  *
  * Uso in ogni servizio:
- *   import { callLLM } from '../../shared/gemini-proxy';
+ *   import { callLLM } from '../../services/shared/gemini-proxy';
  *   const response = await callLLM(prompt, 'planner');
  */
 

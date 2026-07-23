@@ -191,7 +191,7 @@ app.get('/status', (req, res) => {
  * Per feedback in tempo reale usare GET /status in parallelo.
  */
 app.post('/run', async (req, res) => {
-  const { prompt, baseUrl, model, provider, sapUsername, sapPassword, sapType } = req.body;
+  const { prompt, baseUrl, model, provider, openaiBaseURL, openaiApiKey, sapUsername, sapPassword, sapType } = req.body;
 
   // Validazione input — entrambi i campi sono obbligatori
   if (!prompt || !baseUrl) {
@@ -246,7 +246,7 @@ app.post('/run', async (req, res) => {
     run.step = 'planning';
     run.activeService = 'planner';
 
-    const planReqBody: any = { prompt, baseUrl, model: runModel, provider: runProvider };
+    const planReqBody: any = { prompt, baseUrl, model: runModel, provider: runProvider, openaiBaseURL, openaiApiKey };
     if (hasSAP) {
       planReqBody.sapUsername = sapUsername;
       planReqBody.sapPassword = sapPassword;
@@ -268,7 +268,7 @@ app.post('/run', async (req, res) => {
     run.step = 'generating';
     run.activeService = 'generator';
 
-    const genReqBody: any = { plan, baseUrl, model: runModel, provider: runProvider };
+    const genReqBody: any = { plan, baseUrl, model: runModel, provider: runProvider, openaiBaseURL, openaiApiKey };
     if (hasSAP) {
       genReqBody.sapUsername = sapUsername;
       genReqBody.sapPassword = sapPassword;
@@ -321,6 +321,8 @@ app.post('/run', async (req, res) => {
             pageSnapshot: plan.pageSnapshot, // snapshot DOM reale dalla visita del Planner
             model: runModel,
             provider: runProvider,
+            openaiBaseURL,
+            openaiApiKey,
           }, { timeout: 60000 }),
           3, 1000
         );
