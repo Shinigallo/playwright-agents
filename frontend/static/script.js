@@ -104,7 +104,15 @@ async function checkHealth() {
 checkHealth();
 setInterval(checkHealth, 10000);
 
-// ── Reports list ──
+/**
+ * Sanitizza stringhe prima di inserirle nel DOM per prevenire XSS.
+ * I dati LLM non sono attendibili — usiamo sempre textContent invece di innerHTML.
+ */
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
 async function loadReports() {
   const execUrl = document.getElementById('executorUrl').value.replace(/\/$/, '');
   const el = document.getElementById('reportsList');
@@ -164,7 +172,11 @@ function startStatusPolling() {
       if (s.step === 'done' || s.step === 'error' || s.step === 'idle') {
         stopStatusPolling();
       }
-    } catch(e) {}
+    } catch(e) {
+      appendLog('Polling error: ' + (e.message || 'service unavailable'));
+      // Se l'orchestrator crasha, fermiamo il polling
+      stopStatusPolling();
+    }
   }, 1500);
 }
 
@@ -303,14 +315,14 @@ async function runTest() {
         const el = document.createElement('div');
         el.className = 'step-item';
         el.innerHTML = `
-            <div class="step-num">${s.id}</div>
-            <div class="step-body">
-              <span class="step-action">${s.action}</span>
-              <span class="step-desc">${s.description}</span>
-              ${s.selector ? `<div class="step-meta">selector: <code>${s.selector}</code></div>` : ''}
-              ${s.value     ? `<div class="step-meta">value: <code>${s.value}</code></div>` : ''}
-              ${s.assertion ? `<div class="step-meta">assert: <code>${s.assertion}</code></div>` : ''}
-            </div>`;
+          <div class="step-num">${escapeHtml(String(s.id))}</div>
+          <div class="step-body">
+            <span class="step-action">${escapeHtml(s.action)}</span>
+            <span class="step-desc">${escapeHtml(s.description)}</span>
+            ${s.selector ? `<div class="step-meta">selector: <code>${escapeHtml(s.selector)}</code></div>` : ''}
+            ${s.value     ? `<div class="step-meta">value: <code>${escapeHtml(s.value)}</code></div>` : ''}
+            ${s.assertion ? `<div class="step-meta">assert: <code>${escapeHtml(s.assertion)}</code></div>` : ''}
+          </div>`;
         list.appendChild(el);
       });
     }
@@ -338,7 +350,7 @@ async function runTest() {
     // Add to history
     history.unshift({
       id: result.testId,
-      title: result.plan?.title || prompt.substring(0, 40),
+      title: escapeHtml(result.plan?.title || prompt.substring(0, 40)),
       passed: result.passed,
       time: new Date().toLocaleTimeString(),
       result
@@ -360,26 +372,72 @@ function renderHistory() {
   const list = document.getElementById('historyList');
   if (!history.length) return;
   list.innerHTML = history.map((h, i) => `
-      <div class="hist-item" onclick="loadHistory(${i})">
-        <div class="hi-title">${h.title}</div>
-        <div class="hi-meta">
-          <span class="badge ${h.passed ? 'pass' : 'fail'}">${h.passed ? 'PASS' : 'FAIL'}</span>
-          <span>#${h.id}</span>
-          <span>${h.time}</span>
-        </div>
-      </div>`).join('');
+    <div class="hist-item" onclick="loadHistory(${i})">
+      <div class="hi-title">${escapeHtml(h.title)}</div>
+      <div class="hi-meta">
+        <span class="badge ${h.passed ? 'pass' : 'fail'}">${h.passed ? 'PASS' : 'FAIL'}</span>
+        <span>#${escapeHtml(String(h.id))}</span>
+        <span>${escapeHtml(h.time)}</span>
+      </div>
+    </div>`).join('');
 }
 
 function loadHistory(i) {
   const h = history[i];
   currentResult = h.result;
 
-  // Re-populate code tab
-  if (h.result.finalCode) {
-    document.getElementById('emptyCode').style.display = 'none';
-    document.getElementById('codeContent').style.display = 'block';
-    document.getElementById('codeBlock').textContent = h.result.finalCode;
+  // Restore banner
+  const banner = document.getElementById('resultBanner');
+  banner.style.display = 'flex';
+  if (h.result.passed) {
+    banner.className = 'result-banner pass';
+    banner.innerHTML = '<span class="r-icon">✅</span> All tests passed!';
+  } else {
+    banner.className = 'result-banner fail';
+    banner.innerHTML = '<span class="r-icon">❌</span> Tests failed after all heal attempts';
   }
+
+  // Re-populate plan tab
+  if (h.result.plan) {
+    document.getElementById('emptyPlan').style.display = 'none';
+    document.getElementById('planContent').style.display = 'block';
+    document.getElementById('planTitle').textContent = h.result.plan.title || 'Test Plan';
+    const list = document.getElementById('stepsList');
+    list.innerHTML = '';
+    (h.result.plan.steps || []).forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'step-item';
+      el.innerHTML = `
+        <div class="step-num">${escapeHtml(String(s.id))}</div>
+        <div class="step-body">
+          <span class="step-action">${escapeHtml(s.action)}</span>
+          <span class="step-desc">${escapeHtml(s.description)}</span>
+          ${s.selector ? `<div class="step-meta">selector: <code>${escapeHtml(s.selector)}</code></div>` : ''}
+          ${s.value     ? `<div class="step-meta">value: <code>${escapeHtml(s.value)}</code></div>` : ''}
+          ${s.assertion ? `<div class="step-meta">assert: <code>${escapeHtml(s.assertion)}</code></div>` : ''}
+        </div>`;
+      list.appendChild(el);
+    });
+  }
+
+  // Re-populate logs tab
+  document.getElementById('emptyLogs').style.display = 'none';
+  document.getElementById('logsContent').style.display = 'block';
+  const fullLog = document.getElementById('fullLog');
+  fullLog.innerHTML = '';
+  (h.result.log || []).forEach(l => {
+    const line = document.createElement('span');
+    line.className = 'log-line ' + classifyLog(l);
+    line.textContent = l;
+    fullLog.appendChild(line);
+    fullLog.appendChild(document.createElement('br'));
+  });
+
+  // Switch to plan tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector('[data-tab="plan"]').classList.add('active');
+  document.getElementById('tab-plan').classList.add('active');
 }
 
 function copyCode() {

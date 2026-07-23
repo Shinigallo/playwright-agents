@@ -43,12 +43,13 @@ import { callLLM } from './llm';
 /**
  * Rileva se il target è un'applicazione SAP/Fiori
  * Basato su patterns comuni nei URL SAP
+ * Regex ancorate per evitare falsi positivi su URL generiche
  */
 function detectSAP(url: string, prompt: string): boolean {
   const sapPatterns = [
     /\.sap\./i,
     /fiori/i,
-    /s4(hana)?/i,
+    /(?:^|\/)s4(hana)?\/?$/i,          // ancorato alla fine del path
     /webgui/i,
     /ui5/i,
     /sap\.example/i,
@@ -61,13 +62,19 @@ function detectSAP(url: string, prompt: string): boolean {
 const app = express();
 app.use(express.json());
 
-app.use((req, res, next) => {
-  // CORS — solo localhost e reti locali, nessuna wildcard
+  // CORS — whitelist di origini consentite (nessuna wildcard con credentials)
   // In produzione, configurare ALLOWED_ORIGINS con le origini specifiche
-  const origin = req.headers.origin || '*';
-  res.setHeader('Access-Control-Allow-Origin', origin);
+  const ALLOWED_ORIGINS = ['http://localhost:3000', 'http://localhost:8089', 'http://localhost:80'];
+
+app.use((req, res, next) => {
+  if (req.headers.origin && ALLOWED_ORIGINS.includes(req.headers.origin)) {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.headers.origin && ALLOWED_ORIGINS.includes(req.headers.origin)) {
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
@@ -102,7 +109,8 @@ async function snapshotPage(url: string): Promise<string> {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     // Breve attesa per permettere a JS e overlay (cookie banner) di renderizzarsi
-    await page.waitForTimeout(2000);
+    // page.waitForTimeout() deprecato in Playwright ≥ 1.58 — usare setTimeout
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
     // Estrae gli elementi interattivi e semantici rilevanti per la pianificazione
     const snapshot = await page.evaluate(() => {
